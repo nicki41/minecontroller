@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { Puzzle, Info } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/layout/EmptyState";
 import { ModrinthResultCard } from "@/components/modrinth/ModrinthResultCard";
 import { ModrinthFilterBar } from "@/components/modrinth/ModrinthFilterBar";
+import { ModrinthPagination } from "@/components/modrinth/ModrinthPagination";
 import { useModrinthSearch } from "@/lib/modrinth";
 import { resolveTypeFilter, type TypeFilterValue } from "@/lib/modrinthDisplay";
-import { paginationRange } from "@/lib/pagination";
 
 const PAGE_SIZE = 24;
 
@@ -36,8 +35,6 @@ export default function ModrinthBrowsePage() {
   }
 
   const total = search.data?.total_hits ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const currentPage = page + 1;
 
   return (
     <div className="space-y-6">
@@ -89,38 +86,7 @@ export default function ModrinthBrowsePage() {
             ))}
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">
-                {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total.toLocaleString()}
-              </p>
-              <div className="flex items-center gap-1">
-                <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
-                  Previous
-                </Button>
-                {paginationRange(currentPage, totalPages).map((p, i) =>
-                  p === "..." ? (
-                    <span key={`ellipsis-${i}`} className="px-1.5 text-sm text-muted-foreground">
-                      …
-                    </span>
-                  ) : (
-                    <Button
-                      key={p}
-                      size="sm"
-                      variant={p === currentPage ? "default" : "outline"}
-                      className="w-9 px-0"
-                      onClick={() => setPage(p - 1)}
-                    >
-                      {p}
-                    </Button>
-                  ),
-                )}
-                <Button size="sm" variant="outline" disabled={currentPage >= totalPages} onClick={() => setPage((p) => p + 1)}>
-                  Next
-                </Button>
-              </div>
-            </div>
-          )}
+          <ModrinthPagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} />
         </>
       )}
     </div>
