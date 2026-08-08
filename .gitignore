@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+.vite/
+*.tsbuildinfo
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Runtime data (Minecraft server files, backups, uploaded content)
+/data/*
+!/data/.gitkeep
+
+# Postgres (if ever run with a local bind mount instead of a named volume)
+postgres-data/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test / coverage
+coverage/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Prisma
+apps/api/prisma/dev.db

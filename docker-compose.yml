@@ -1,0 +1,76 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: minecraftpanel-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      # SQLite file lives inside the /data bind mount below, so it's a
+      # single self-contained deployment — no separate DB container or
+      # credentials to configure. Not overridable via .env on purpose: the
+      # path must match the DATA_PATH volume mount for the file to persist.
+      DATABASE_URL: file:/data/db.sqlite
+      SESSION_SECRET: ${SESSION_SECRET}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      DOCKER_SOCKET_PATH: /var/run/docker.sock
+      HOST_DATA_PATH: ${HOST_DATA_PATH}
+      DATA_PATH: /data
+      MINECRAFT_IMAGE: ${MINECRAFT_IMAGE:-itzg/minecraft-server:latest}
+      MINECRAFT_NETWORK: ${MINECRAFT_NETWORK:-minecraftpanel_mc_net}
+      MC_PORT_RANGE_MIN: ${MC_PORT_RANGE_MIN:-25565}
+      MC_PORT_RANGE_MAX: ${MC_PORT_RANGE_MAX:-25664}
+      MODRINTH_API_URL: ${MODRINTH_API_URL:-https://api.modrinth.com/v2}
+      MODRINTH_USER_AGENT: ${MODRINTH_USER_AGENT:-minecraftpanel/0.1.0}
+    # No published host port by default: reached via proxy_net (see the
+    # network entry below) with a reverse proxy in front, e.g.
+    # nginx-proxy-manager pointed at "minecraftpanel-api" : 3000 — enable
+    # its "Websockets Support" toggle, the live console needs it.
+    # No reverse proxy? Uncomment to expose the panel directly instead:
+    # ports:
+    #   - "${PANEL_PORT:-3000}:3000"
+    volumes:
+      # Server files, uploads, backups, AND the sqlite database itself
+      # (db.sqlite, at the top level of this folder) — the whole panel's
+      # state lives in this one bind mount. Bind-mounted (not a named
+      # volume) so HOST_DATA_PATH below can reliably point the Docker
+      # daemon at the same folder when the API asks it to bind-mount
+      # per-server data into newly created Minecraft containers (see README).
+      - ./data:/data
+      # Grants the API container control over the host's Docker daemon so it
+      # can create/start/stop/inspect Minecraft server containers. This is
+      # equivalent to root on the host if the API container is compromised —
+      # see README "Docker socket & security" before exposing this panel
+      # beyond a trusted, single-tenant, private network.
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+    networks:
+      # So the API can reach each Minecraft container's RCON port by
+      # container name over Docker's embedded DNS, without ever publishing
+      # RCON to the host. See DockerMinecraftRuntime / RconClient.
+      - minecraftpanel_mc_net
+      # Reverse-proxy network (e.g. nginx-proxy-manager) — lets that
+      # container reach this one by name. Not needed if you uncommented
+      # "ports:" above for direct access instead; remove this line and the
+      # proxy_net entry under top-level networks if you don't have one.
+      - proxy_net
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+networks:
+  # Dedicated network for dynamically created Minecraft server containers.
+  # Declared here so `docker compose down` can be told to leave it alone if
+  # servers are still meant to exist; the API also ensures it exists at boot.
+  minecraftpanel_mc_net:
+    name: ${MINECRAFT_NETWORK:-minecraftpanel_mc_net}
+    driver: bridge
+  # Managed by the existing nginx-proxy-manager stack, not by minecraftpanel
+  # — must already exist (it does: created alongside nginx-proxy-manager).
+  proxy_net:
+    external: true

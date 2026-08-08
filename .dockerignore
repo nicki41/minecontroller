@@ -1,0 +1,15 @@
+node_modules
+**/node_modules
+dist
+**/dist
+.vite
+**/.vite
+data
+.git
+.env
+.env.local
+*.log
+coverage
+**/coverage
+.vscode
+.idea

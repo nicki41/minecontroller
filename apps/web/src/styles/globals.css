@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Palette from the minecraftpanel design mockup (dark neutrals + pink
+ * accent, see minecraftpanel.dc.html): background #15151a, surface #1c1c22,
+ * border #2a2a30, text primary #eceef1, text secondary #8a8a92, accent pink
+ * #d6598f / hover #c23f79 / tint #e8a4c4 / pale #f4c9dc.
+ *
+ * status-* colors are deliberately NOT recolored to the pink accent —
+ * "online = green" is a near-universal convention independent of brand
+ * color, and the mockup doesn't specify status colors at all.
+ */
+@layer base {
+  :root,
+  .dark {
+    --background: 240 11% 9%;
+    --foreground: 216 15% 94%;
+
+    --card: 240 10% 12%;
+    --card-foreground: 216 15% 94%;
+
+    --popover: 240 10% 12%;
+    --popover-foreground: 216 15% 94%;
+
+    --primary: 334 60% 59%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 7% 18%;
+    --secondary-foreground: 216 15% 94%;
+
+    --muted: 240 8% 15%;
+    --muted-foreground: 240 4% 56%;
+
+    --accent: 240 7% 18%;
+    --accent-foreground: 216 15% 94%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 240 7% 18%;
+    --input: 240 7% 18%;
+    --ring: 333 52% 50%;
+
+    --radius: 0.5rem;
+
+    --status-online: 142 71% 45%;
+    --status-starting: 45 93% 55%;
+    --status-stopping: 25 95% 55%;
+    --status-offline: 217 10% 45%;
+    --status-error: 0 72% 51%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  ::selection {
+    @apply bg-primary/30;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 9999px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}

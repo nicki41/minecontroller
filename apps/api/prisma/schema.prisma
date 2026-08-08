@@ -1,0 +1,274 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------------------
+// Users, roles, permissions
+// ------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String
+  /// Owner accounts cannot be deleted/demoted below the last remaining Owner (enforced in code).
+  isOwner      Boolean  @default(false)
+  isDisabled   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  /// AES-256-GCM ciphertext (base64) of the TOTP secret, keyed from SESSION_SECRET — see lib/totpCrypto.ts. Set as soon as setup begins, before totpEnabled flips true.
+  totpSecretEncrypted String?
+  /// False while a secret has been provisioned but not yet confirmed with a valid code — see AuthService.enableTotp.
+  totpEnabled          Boolean @default(false)
+
+  roles         UserRole[]
+  serverAccess  ServerAccess[]
+  sessions      Session[]
+  auditLogs     AuditLog[]
+  backups       Backup[]
+  recoveryCodes RecoveryCode[]
+
+  @@index([email])
+}
+
+model RecoveryCode {
+  id        String    @id @default(cuid())
+  userId    String
+  /// HMAC-SHA256(SESSION_SECRET, code) — codes are single-use and high-entropy, so a fast keyed hash is appropriate (not a slow password hash).
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Role {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  /// System roles (Owner/Admin/Manager/Moderator/Viewer) are seeded and cannot be deleted.
+  isSystem  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  permissions RolePermission[]
+  users       UserRole[]
+}
+
+model Permission {
+  id  String @id @default(cuid())
+  /// Dotted permission key, e.g. "servers.view" — see packages/shared/src/permissions.ts
+  key String @unique
+
+  roles RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model UserRole {
+  userId String
+  roleId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model ServerAccess {
+  id       String @id @default(cuid())
+  userId   String
+  serverId String
+  /// "FULL" | "VIEW_ONLY" — see AccessLevel in packages/shared/src/types/enums.ts.
+  /// Plain String because SQLite's Prisma connector has no native enum type;
+  /// validity is enforced at the API boundary via Zod, not the DB schema.
+  level String
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, serverId])
+  @@index([serverId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  /// SHA-256 hex of the raw session token; the raw token only ever lives in the client's cookie.
+  tokenHash String   @unique
+  userAgent String?
+  ipAddress String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ------------------------------------------------------------------
+// Servers
+// ------------------------------------------------------------------
+
+model Server {
+  id          String @id @default(cuid())
+  name        String
+  description String?
+
+  /// ServerSoftware union (VANILLA/PAPER/FABRIC/FORGE/NEOFORGE) — see the
+  /// note on ServerAccess.level for why this is String, not a DB enum.
+  software  String
+  mcVersion String
+  /// Software-specific build/loader/installer version (e.g. Paper build, Fabric loader, Forge/NeoForge version). Null for Vanilla.
+  buildVersion String?
+
+  containerId   String? @unique
+  containerName String  @unique
+  /// Game (Minecraft protocol) port published on the host.
+  port    Int @unique
+
+  memoryMb    Int
+  cpuCores    Float
+  diskLimitMb Int?
+
+  /// ServerStatus union (CREATING/INSTALLING/STOPPED/STARTING/RUNNING/STOPPING/ERROR/DELETING).
+  status       String @default("CREATING")
+  /// Free-text detail shown in the UI when status is ERROR.
+  statusDetail String?
+
+  /// Path relative to DATA_PATH / HOST_DATA_PATH, e.g. "servers/<id>".
+  dataDir String
+
+  /// Gameplay settings (motd, max-players, difficulty, gamemode, whitelist,
+  /// online-mode, pvp, view/simulation-distance, etc.) used to live here as
+  /// DB columns mirrored into Docker env vars — removed because the itzg
+  /// image re-applies env vars into server.properties on every container
+  /// start, silently overwriting any edit made through Settings once the
+  /// container already existed. The panel now owns server.properties
+  /// directly (see ServerConfigService + configSchemas/serverProperties.ts)
+  /// as the single source of truth; it's created with defaults at
+  /// provisioning time and edited in place from then on.
+  autoRestartEnabled  Boolean @default(false)
+  restartCron         String?
+
+  /// Must be explicitly set true by the user at creation time (checkbox in the
+  /// creation wizard) before the container is ever created with EULA=TRUE.
+  /// Defaults to false so any code path that forgets to pass it never
+  /// accidentally accepts the EULA on the user's behalf.
+  eulaAccepted Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  access         ServerAccess[]
+  auditLogs      AuditLog[]
+  backups        Backup[]
+  pluginInstalls PluginInstall[]
+
+  @@index([status])
+}
+
+// ------------------------------------------------------------------
+// Installed plugins/mods — optional Modrinth metadata linked to a file
+// physically present in the server's plugins/mods directory.
+// ------------------------------------------------------------------
+
+model PluginInstall {
+  id       String @id @default(cuid())
+  serverId String
+
+  /// The canonical "loaded" filename (e.g. "luckperms.jar"), fixed at install
+  /// time and never changed by pause/resume — see modrinth.service.ts
+  /// listInstalled(). Pausing renames the file on disk to
+  /// "<activeFilename>.disabled" without ever touching this row, so the join
+  /// between disk state and this metadata survives renames without a
+  /// coordinated (and racy) two-system update.
+  activeFilename String
+
+  modrinthProjectId String
+  modrinthVersionId String
+  versionNumber     String?
+  title             String
+  /// Modrinth's project resource has no direct author field (only its
+  /// search index does) — passed through from the client's already-fetched
+  /// search result at install time rather than an extra API round-trip.
+  /// Purely cosmetic display text, never used for any authorization/logic.
+  author            String?
+  iconUrl           String?
+  slug              String
+
+  installedAt DateTime @default(now())
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@unique([serverId, activeFilename])
+  @@index([serverId])
+}
+
+model Backup {
+  id        String   @id @default(cuid())
+  serverId  String
+  fileName  String
+  sizeBytes BigInt
+  note      String?
+  createdById String?
+  createdAt DateTime @default(now())
+
+  server    Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([serverId])
+}
+
+// ------------------------------------------------------------------
+// Audit log
+// ------------------------------------------------------------------
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  serverId  String?
+  /// Dotted action key, e.g. "server.restart", "user.create", "auth.login".
+  action    String
+  /// JSON-stringified details blob. SQLite's Prisma connector has no native
+  /// Json type, so this is serialized/deserialized by hand in audit.service.ts.
+  details   String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  server Server? @relation(fields: [serverId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([serverId])
+  @@index([createdAt])
+}
+
+// ------------------------------------------------------------------
+// Instance-wide key/value settings (Modrinth UA overrides, etc.)
+// ------------------------------------------------------------------
+
+model Setting {
+  key String @id
+  /// JSON-stringified value — see the note on AuditLog.details.
+  value String
+}
