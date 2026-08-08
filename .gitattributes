@@ -1,0 +1,7 @@
+# Force LF line endings for everything in the repository and in any
+# checkout/archive, regardless of the platform's core.autocrlf setting.
+# Without this, `git archive` on Windows (as used to build/deploy the
+# Docker image) can re-introduce CRLF into shell scripts like
+# docker/entrypoint.sh, which then fail to exec inside the Linux container
+# ("No such file or directory" from a CRLF-corrupted shebang line).
+* text=auto eol=lf
