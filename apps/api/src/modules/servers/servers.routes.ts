@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import fsp from "node:fs/promises";
+import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
@@ -11,10 +14,16 @@ import {
 import { AuditAction } from "../audit/audit.service.js";
 import { BackupService } from "../backups/backups.service.js";
 import { serializeServer } from "./servers.serialize.js";
+import { BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { env } from "../../config/env.js";
 
 const versionsQuerySchema = z.object({ software: z.enum(SERVER_SOFTWARE) });
 const deleteQuerySchema = z.object({ keepFiles: z.coerce.boolean().optional().default(false) });
 const historyQuerySchema = z.object({ range: z.enum(["5m", "15m", "1h", "6h", "24h"]).default("1h") });
+
+const ICON_FILENAME = "server-icon.png";
+const MAX_ICON_BYTES = 2 * 1024 * 1024;
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 export async function serversRoutes(fastify: FastifyInstance) {
   const backupService = new BackupService(fastify.prisma);
@@ -99,6 +108,53 @@ export async function serversRoutes(fastify: FastifyInstance) {
     }, input);
 
     return reply.send({ server: serializeServer(server, request.serverAccessLevel ?? "FULL") });
+  });
+
+  fastify.get("/:id/icon", { preHandler: fastify.requireServerAccess("servers.view") }, async (request, reply) => {
+    const iconPath = path.join(env.DATA_PATH, request.mcServer!.dataDir, ICON_FILENAME);
+    const stat = await fsp.stat(iconPath).catch(() => null);
+    if (!stat || !stat.isFile()) throw new NotFoundError("No server icon is set.");
+
+    reply.type("image/png");
+    reply.header("Cache-Control", "no-store");
+    return reply.send(fs.createReadStream(iconPath));
+  });
+
+  fastify.put("/:id/icon", { preHandler: fastify.requireServerAccess("servers.settings.edit") }, async (request, reply) => {
+    const part = await request.file({ limits: { fileSize: MAX_ICON_BYTES } });
+    if (!part) throw new BadRequestError("No icon file was uploaded.");
+
+    const buffer = await part.toBuffer();
+    if (buffer.length < PNG_MAGIC.length || !buffer.subarray(0, PNG_MAGIC.length).equals(PNG_MAGIC)) {
+      throw new BadRequestError("The server icon must be a PNG image.");
+    }
+
+    const dataDir = path.join(env.DATA_PATH, request.mcServer!.dataDir);
+    const iconPath = path.join(dataDir, ICON_FILENAME);
+    const tmpPath = path.join(dataDir, `.${ICON_FILENAME}.tmp-${Date.now()}`);
+    await fsp.writeFile(tmpPath, buffer);
+    await fsp.rename(tmpPath, iconPath);
+
+    await fastify.audit.record(AuditAction.SERVER_SETTINGS_UPDATE, {
+      userId: request.user!.id,
+      serverId: request.mcServer!.id,
+      ipAddress: request.ip,
+    }, { field: "server-icon" });
+
+    return reply.status(204).send();
+  });
+
+  fastify.delete("/:id/icon", { preHandler: fastify.requireServerAccess("servers.settings.edit") }, async (request, reply) => {
+    const iconPath = path.join(env.DATA_PATH, request.mcServer!.dataDir, ICON_FILENAME);
+    await fsp.rm(iconPath, { force: true });
+
+    await fastify.audit.record(AuditAction.SERVER_SETTINGS_UPDATE, {
+      userId: request.user!.id,
+      serverId: request.mcServer!.id,
+      ipAddress: request.ip,
+    }, { field: "server-icon", removed: true });
+
+    return reply.status(204).send();
   });
 
   fastify.post("/:id/start", { preHandler: fastify.requireServerAccess("servers.start") }, async (request, reply) => {

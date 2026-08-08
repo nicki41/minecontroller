@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Info } from "lucide-react";
 import type { ConfigFieldDef, ServerConfigFileDef, ServerDto } from "@minecraftpanel/shared";
@@ -14,7 +14,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useServerAction } from "@/lib/servers";
 import { useServerConfigFile, useUpdateServerConfigFile } from "@/lib/serverConfig";
 import { ApiError } from "@/lib/api";
-import { MotdHelp } from "./MotdHelp";
 import { RestartConfirmDialog } from "./RestartConfirmDialog";
 
 type ConfigValue = string | number | boolean | null;
@@ -24,13 +23,11 @@ function ConfigFieldRow({
   value,
   onChange,
   disabled,
-  inputRef,
 }: {
   field: ConfigFieldDef;
   value: ConfigValue;
   onChange: (v: ConfigValue) => void;
   disabled: boolean;
-  inputRef?: (el: HTMLInputElement | null) => void;
 }) {
   if (field.type === "boolean") {
     return (
@@ -75,7 +72,6 @@ function ConfigFieldRow({
       {field.type === "string" && (
         <Input
           id={field.key}
-          ref={inputRef}
           value={value === null ? "" : String(value)}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
@@ -85,11 +81,22 @@ function ConfigFieldRow({
   );
 }
 
-export function ConfigFileCard({ server, fileDef, canEdit }: { server: ServerDto; fileDef: ServerConfigFileDef; canEdit: boolean }) {
+export function ConfigFileCard({
+  server,
+  fileDef,
+  canEdit,
+  excludeKeys,
+}: {
+  server: ServerDto;
+  fileDef: ServerConfigFileDef;
+  canEdit: boolean;
+  /** Field keys to omit from this card's rendering (e.g. moved to a dedicated editor elsewhere) — the underlying file/schema is untouched, so the API can still read/write them. */
+  excludeKeys?: string[];
+}) {
+  const excluded = excludeKeys ? new Set(excludeKeys) : null;
   const query = useServerConfigFile(server.id, fileDef.id);
   const update = useUpdateServerConfigFile(server.id, fileDef.id);
   const restart = useServerAction(server.id, "restart");
-  const motdRef = useRef<HTMLInputElement | null>(null);
 
   const [values, setValues] = useState<Record<string, ConfigValue>>({});
   const [touched, setTouched] = useState<Set<string>>(new Set());
@@ -107,24 +114,6 @@ export function ConfigFileCard({ server, fileDef, canEdit }: { server: ServerDto
   function setField(key: string, value: ConfigValue) {
     setValues((v) => ({ ...v, [key]: value }));
     setTouched((t) => new Set(t).add(key));
-  }
-
-  function insertIntoMotd(code: string) {
-    const el = motdRef.current;
-    const current = typeof values.motd === "string" ? values.motd : "";
-    if (!el) {
-      setField("motd", current + code);
-      return;
-    }
-    const start = el.selectionStart ?? current.length;
-    const end = el.selectionEnd ?? current.length;
-    const next = current.slice(0, start) + code + current.slice(end);
-    setField("motd", next);
-    requestAnimationFrame(() => {
-      el.focus();
-      const caret = start + code.length;
-      el.setSelectionRange(caret, caret);
-    });
   }
 
   async function doSave(): Promise<boolean> {
@@ -194,25 +183,26 @@ export function ConfigFileCard({ server, fileDef, canEdit }: { server: ServerDto
 
           {!query.isLoading &&
             query.data &&
-            fileDef.sections.map((section) => (
-              <div key={section.id} className="space-y-1">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{section.label}</h3>
-                <div className="divide-y divide-border/60">
-                  {section.fields.map((field) => (
-                    <div key={field.key}>
+            fileDef.sections.map((section) => {
+              const fields = excluded ? section.fields.filter((f) => !excluded.has(f.key)) : section.fields;
+              if (fields.length === 0) return null;
+              return (
+                <div key={section.id} className="space-y-1">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{section.label}</h3>
+                  <div className="divide-y divide-border/60">
+                    {fields.map((field) => (
                       <ConfigFieldRow
+                        key={field.key}
                         field={field}
                         value={values[field.key] ?? null}
                         onChange={(v) => setField(field.key, v)}
                         disabled={!canEdit}
-                        inputRef={field.key === "motd" ? (el) => (motdRef.current = el) : undefined}
                       />
-                      {field.key === "motd" && <MotdHelp onInsert={insertIntoMotd} />}
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
         </CardContent>
         {canEdit && (
           <CardFooter>

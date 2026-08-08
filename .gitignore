@@ -33,5 +33,8 @@ coverage/
 !.vscode/extensions.json
 *.swp
 
+# Claude Code local config
+.claude/
+
 # Prisma
 apps/api/prisma/dev.db
