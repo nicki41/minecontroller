@@ -1,0 +1,5 @@
+<svg viewBox="0 0 100 100" width="96" height="96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="minecontroller logo">
+  <polygon points="50,0 100,27 50,54 0,27" fill="#e8a4c4" />
+  <polygon points="0,27 50,54 50,100 0,73" fill="#2a2a30" />
+  <polygon points="100,27 50,54 50,100 100,73" fill="#d6598f" />
+</svg>

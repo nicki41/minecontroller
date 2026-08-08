@@ -20,7 +20,7 @@ The api container mounts `./data` at `/data` and works internally with that path
 ```mermaid
 flowchart LR
     subgraph Host["Docker host filesystem"]
-        HD["/home/you/minecraftpanel/data<br/>(HOST_DATA_PATH)"]
+        HD["/home/you/minecontroller/data<br/>(HOST_DATA_PATH)"]
     end
 
     subgraph APIC["api container"]
@@ -39,9 +39,9 @@ Both containers end up mounting the same host directory, but the API has to be t
 
 ```
 # Linux/macOS:
-HOST_DATA_PATH=/home/youruser/minecraftpanel/data
+HOST_DATA_PATH=/home/youruser/minecontroller/data
 # Windows + Docker Desktop:
-HOST_DATA_PATH=//c/Users/you/minecraftpanel/data
+HOST_DATA_PATH=//c/Users/you/minecontroller/data
 ```
 
 If a newly created server gets stuck in `INSTALLING` or its container starts with no data, this is the first thing to check — inspect the new container with `docker inspect <container>` and confirm its `Binds` entry points at a host path that actually exists.

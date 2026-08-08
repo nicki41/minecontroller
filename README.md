@@ -1,4 +1,8 @@
-# minecraftpanel
+<p align="center">
+  <img src="docs/assets/logo.svg" width="96" height="96" alt="minecontroller logo">
+</p>
+
+<h1 align="center">minecontroller</h1>
 
 A self-hosted management panel for multiple Minecraft servers. Each server runs in its own Docker container (base image [`itzg/docker-minecraft-server`](https://github.com/itzg/docker-minecraft-server)), managed through a Fastify/TypeScript API with an embedded SQLite database and a React UI. One container, no separate database service — `docker compose up -d` is all it takes.
 
@@ -58,7 +62,7 @@ Full breakdown — component diagram, server-creation flow, RBAC model, and the 
 
 ```bash
 git clone <this-repository>
-cd minecraftpanel
+cd minecontroller
 cp .env.example .env
 ```
 
