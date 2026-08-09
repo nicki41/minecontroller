@@ -13,18 +13,9 @@ export function PlayerGeneralTab({ player: p }: PlayerGeneralTabProps) {
   const { copiedField, copy } = useCopyField();
   const [showIp, setShowIp] = useState(false);
 
-  const statusText = p.banned ? "Banned" : p.online ? "Online" : "Offline";
-  const statusTextColor = p.banned ? "text-status-error" : p.online ? "text-status-online" : "text-status-offline";
-  const statusDotColor = p.banned ? "bg-status-error" : p.online ? "bg-status-online" : "bg-status-offline";
-  const statusBg = p.banned ? "bg-status-error/15" : p.online ? "bg-status-online/15" : "bg-status-offline/15";
-
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap gap-1.5">
-        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${statusBg} ${statusTextColor}`}>
-          <span className={`h-1.5 w-1.5 rounded-full ${statusDotColor}`} />
-          {statusText}
-        </span>
         {p.whitelisted && (
           <Badge variant="outline" className="border-transparent bg-amber-500/15 text-amber-500">
             Whitelisted

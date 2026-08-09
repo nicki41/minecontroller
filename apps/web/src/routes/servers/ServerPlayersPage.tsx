@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Info, Search, SlidersHorizontal, Users } from "lucide-react";
+import { Filter, Info, Search, Users, X } from "lucide-react";
 import type { PlayerDto } from "@minecraftpanel/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/layout/EmptyState";
@@ -27,11 +29,10 @@ import { PlayerDetailModal } from "@/components/players/PlayerDetailModal";
 import type { PlayerActionHandlers } from "@/components/players/playerActions";
 import { useServerOutletContext } from "./useServerOutletContext";
 
-type FilterKey = "all" | "online" | "offline" | "banned" | "whitelisted" | "op";
+type StatusKey = "online" | "offline" | "banned" | "whitelisted" | "op";
 type SortKey = "online" | "name" | "lastSeen" | "playtime";
 
-const FILTERS: { key: FilterKey; label: string }[] = [
-  { key: "all", label: "All" },
+const STATUS_OPTIONS: { key: StatusKey; label: string }[] = [
   { key: "online", label: "Online" },
   { key: "offline", label: "Offline" },
   { key: "banned", label: "Banned" },
@@ -46,6 +47,21 @@ const SORTS: { key: SortKey; label: string }[] = [
   { key: "playtime", label: "Playtime (most first)" },
 ];
 
+function matchesStatus(p: PlayerDto, status: StatusKey): boolean {
+  switch (status) {
+    case "online":
+      return p.online;
+    case "offline":
+      return !p.online;
+    case "banned":
+      return p.banned;
+    case "whitelisted":
+      return p.whitelisted;
+    case "op":
+      return p.op;
+  }
+}
+
 function lastSeenTime(p: PlayerDto): number {
   if (p.online) return Infinity;
   return p.lastSeenAt ? new Date(p.lastSeenAt).getTime() : -Infinity;
@@ -56,10 +72,9 @@ export default function ServerPlayersPage() {
   const { hasPermission } = useAuth();
   const { data, isLoading } = usePlayers(server.id);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<FilterKey>("all");
+  const [statuses, setStatuses] = useState<Set<StatusKey>>(new Set());
   const [sort, setSort] = useState<SortKey>("online");
   const [minPlaytimeHours, setMinPlaytimeHours] = useState("");
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [selected, setSelected] = useState<{ username: string; compose: boolean } | null>(null);
 
   const isRunning = server.status === "RUNNING";
@@ -134,22 +149,7 @@ export default function ServerPlayersPage() {
     const result = players
       .filter((p) => !term || p.username.toLowerCase().includes(term))
       .filter((p) => p.playtimeSeconds >= minSeconds)
-      .filter((p) => {
-        switch (filter) {
-          case "online":
-            return p.online && !p.banned;
-          case "offline":
-            return !p.online && !p.banned;
-          case "banned":
-            return p.banned;
-          case "whitelisted":
-            return p.whitelisted;
-          case "op":
-            return p.op;
-          default:
-            return true;
-        }
-      });
+      .filter((p) => [...statuses].every((status) => matchesStatus(p, status)));
 
     switch (sort) {
       case "name":
@@ -165,10 +165,27 @@ export default function ServerPlayersPage() {
         result.sort((a, b) => Number(b.online) - Number(a.online) || a.username.localeCompare(b.username));
     }
     return result;
-  }, [players, search, filter, sort, minPlaytimeHours]);
+  }, [players, search, statuses, sort, minPlaytimeHours]);
 
   const onlineCount = players.filter((p) => p.online && !p.banned).length;
   const selectedPlayer: PlayerDto | null = selected ? (players.find((p) => p.username === selected.username) ?? null) : null;
+
+  const activeFilterCount = statuses.size + (Number(minPlaytimeHours) > 0 ? 1 : 0);
+
+  function toggleStatus(status: StatusKey, checked: boolean) {
+    setStatuses((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(status);
+      else next.delete(status);
+      return next;
+    });
+  }
+
+  function clearFilters() {
+    setStatuses(new Set());
+    setMinPlaytimeHours("");
+    setSort("online");
+  }
 
   return (
     <div className="space-y-4">
@@ -199,48 +216,66 @@ export default function ServerPlayersPage() {
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search players…" className="pl-9" />
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {FILTERS.map((f) => (
-            <Button key={f.key} size="sm" variant={filter === f.key ? "default" : "outline"} onClick={() => setFilter(f.key)}>
-              {f.label}
-            </Button>
-          ))}
-        </div>
-        <Button size="sm" variant={showAdvanced ? "default" : "outline"} onClick={() => setShowAdvanced((v) => !v)}>
-          <SlidersHorizontal className="h-3.5 w-3.5" /> Advanced
-        </Button>
-      </div>
 
-      {showAdvanced && (
-        <div className="flex flex-wrap items-end gap-4 rounded-lg border border-border bg-muted/20 p-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Sort by</Label>
-            <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
-              <SelectTrigger className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SORTS.map((s) => (
-                  <SelectItem key={s.key} value={s.key}>
-                    {s.label}
-                  </SelectItem>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button size="sm" variant={activeFilterCount > 0 ? "default" : "outline"}>
+              <Filter className="h-3.5 w-3.5" /> Filter
+              {activeFilterCount > 0 && (
+                <span className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary-foreground text-[10px] font-semibold text-primary">
+                  {activeFilterCount}
+                </span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-72 space-y-4" align="start">
+            <div>
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</div>
+              <div className="space-y-2">
+                {STATUS_OPTIONS.map((opt) => (
+                  <label key={opt.key} className="flex cursor-pointer items-center gap-2 text-sm">
+                    <Checkbox checked={statuses.has(opt.key)} onCheckedChange={(checked) => toggleStatus(opt.key, checked === true)} />
+                    {opt.label}
+                  </label>
                 ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Min. playtime (hours)</Label>
-            <Input
-              type="number"
-              min={0}
-              value={minPlaytimeHours}
-              onChange={(e) => setMinPlaytimeHours(e.target.value)}
-              placeholder="0"
-              className="w-32"
-            />
-          </div>
-        </div>
-      )}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Sort by</Label>
+              <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SORTS.map((s) => (
+                    <SelectItem key={s.key} value={s.key}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Min. playtime (hours)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={minPlaytimeHours}
+                onChange={(e) => setMinPlaytimeHours(e.target.value)}
+                placeholder="0"
+              />
+            </div>
+
+            {activeFilterCount > 0 && (
+              <Button variant="ghost" size="sm" className="w-full" onClick={clearFilters}>
+                <X className="h-3.5 w-3.5" /> Clear filters
+              </Button>
+            )}
+          </PopoverContent>
+        </Popover>
+      </div>
 
       {isLoading && <Skeleton className="h-48 w-full" />}
 

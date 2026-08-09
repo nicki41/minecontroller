@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Ban, LogOut, ShieldCheck, ShieldOff, ListPlus, ListX, ShieldX, Trash2, Clock, Globe, Gamepad2, Eye, EyeOff } from "lucide-react";
+import { Ban, LogOut, ShieldCheck, ShieldOff, ListPlus, ListX, ShieldX, Trash2, Clock, Globe, Gamepad2, Eye, EyeOff, MessageSquare } from "lucide-react";
 import type { PlayerBanDto, PlayerDto, PlayerGamemode } from "@minecraftpanel/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,6 +68,38 @@ export function PlayerModerationTab({ player: p, serverId, actions, initialCompo
       <div>
         <div className="mb-2 text-sm font-medium">Quick actions</div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {actions.canWhitelist &&
+            (p.whitelisted ? (
+              <ConfirmActionDialog
+                trigger={
+                  <Button variant="outline" size="sm" className="w-full">
+                    <ListX className="h-3.5 w-3.5" /> Remove WL
+                  </Button>
+                }
+                title={`Remove ${p.username} from the whitelist?`}
+                description="They won't be able to join while the server is whitelisted."
+                confirmLabel="Remove"
+                onConfirm={() => actions.onWhitelistRemove(p.username)}
+              />
+            ) : (
+              <ConfirmActionDialog
+                trigger={
+                  <Button variant="outline" size="sm" className="w-full">
+                    <ListPlus className="h-3.5 w-3.5" /> Whitelist
+                  </Button>
+                }
+                title={`Whitelist ${p.username}?`}
+                description="They'll be allowed to join while the server is whitelisted."
+                confirmLabel="Whitelist"
+                onConfirm={() => actions.onWhitelistAdd(p.username)}
+              />
+            ))}
+          {actions.canMessage && (
+            <Button variant="outline" size="sm" className="w-full" onClick={() => setShowCompose((v) => !v)}>
+              <MessageSquare className="h-3.5 w-3.5" /> Message
+            </Button>
+          )}
+          {actions.canOp && <GamemodeChanger player={p} serverId={serverId} actions={actions} />}
           {actions.canKick && (
             <ConfirmActionDialog
               trigger={
@@ -112,32 +144,20 @@ export function PlayerModerationTab({ player: p, serverId, actions, initialCompo
             ))}
           {actions.canBan && !p.banned && <TempBanDialog player={p} actions={actions} />}
           {actions.canBan && <IpBanDialog player={p} actions={actions} />}
-          {actions.canWhitelist &&
-            (p.whitelisted ? (
-              <ConfirmActionDialog
-                trigger={
-                  <Button variant="outline" size="sm" className="w-full">
-                    <ListX className="h-3.5 w-3.5" /> Remove WL
-                  </Button>
-                }
-                title={`Remove ${p.username} from the whitelist?`}
-                description="They won't be able to join while the server is whitelisted."
-                confirmLabel="Remove"
-                onConfirm={() => actions.onWhitelistRemove(p.username)}
-              />
-            ) : (
-              <ConfirmActionDialog
-                trigger={
-                  <Button variant="outline" size="sm" className="w-full">
-                    <ListPlus className="h-3.5 w-3.5" /> Whitelist
-                  </Button>
-                }
-                title={`Whitelist ${p.username}?`}
-                description="They'll be allowed to join while the server is whitelisted."
-                confirmLabel="Whitelist"
-                onConfirm={() => actions.onWhitelistAdd(p.username)}
-              />
-            ))}
+          {actions.canWipe && (
+            <ConfirmActionDialog
+              trigger={
+                <Button variant="destructive" size="sm" className="w-full">
+                  <Trash2 className="h-3.5 w-3.5" /> Wipe
+                </Button>
+              }
+              title={`Permanently wipe ${p.username}'s data?`}
+              description="Deletes their stats and playerdata files — kills, deaths, distance, inventory, XP, everything. They'll start completely fresh next time they join. This cannot be undone."
+              confirmLabel="Wipe data"
+              destructive
+              onConfirm={() => actions.onWipe(p.username)}
+            />
+          )}
           {actions.canOp &&
             (p.op ? (
               <ConfirmActionDialog
@@ -154,36 +174,17 @@ export function PlayerModerationTab({ player: p, serverId, actions, initialCompo
             ) : (
               <ConfirmActionDialog
                 trigger={
-                  <Button variant="outline" size="sm" className="w-full">
+                  <Button variant="destructive" size="sm" className="w-full">
                     <ShieldCheck className="h-3.5 w-3.5" /> Make OP
                   </Button>
                 }
                 title={`Make ${p.username} an operator?`}
                 description="They'll gain access to operator/admin commands."
                 confirmLabel="Make OP"
+                destructive
                 onConfirm={() => actions.onOp(p.username)}
               />
             ))}
-          {actions.canOp && <GamemodeChanger player={p} serverId={serverId} actions={actions} />}
-          {actions.canMessage && (
-            <Button variant="outline" size="sm" className="w-full" onClick={() => setShowCompose((v) => !v)}>
-              Message
-            </Button>
-          )}
-          {actions.canWipe && (
-            <ConfirmActionDialog
-              trigger={
-                <Button variant="destructive" size="sm" className="w-full">
-                  <Trash2 className="h-3.5 w-3.5" /> Wipe
-                </Button>
-              }
-              title={`Permanently wipe ${p.username}'s data?`}
-              description="Deletes their stats and playerdata files — kills, deaths, distance, inventory, XP, everything. They'll start completely fresh next time they join. This cannot be undone."
-              confirmLabel="Wipe data"
-              destructive
-              onConfirm={() => actions.onWipe(p.username)}
-            />
-          )}
         </div>
 
         {showCompose && (
@@ -199,21 +200,6 @@ export function PlayerModerationTab({ player: p, serverId, actions, initialCompo
             <Button onClick={() => void handleSend()} disabled={!messageText.trim() || sending}>
               Send
             </Button>
-          </div>
-        )}
-      </div>
-
-      <div>
-        <div className="mb-2 text-sm font-medium">Ban history</div>
-        {bansLoading ? (
-          <Skeleton className="h-16 w-full" />
-        ) : !bansData?.bans.length ? (
-          <div className="text-sm text-muted-foreground">No bans on record.</div>
-        ) : (
-          <div className="space-y-2">
-            {bansData.bans.map((ban) => (
-              <BanRow key={ban.id} ban={ban} player={p} actions={actions} />
-            ))}
           </div>
         )}
       </div>
@@ -262,6 +248,21 @@ export function PlayerModerationTab({ player: p, serverId, actions, initialCompo
           )}
         </div>
       </div>
+
+      <div>
+        <div className="mb-2 text-sm font-medium">Ban history</div>
+        {bansLoading ? (
+          <Skeleton className="h-16 w-full" />
+        ) : !bansData?.bans.length ? (
+          <div className="text-sm text-muted-foreground">No bans on record.</div>
+        ) : (
+          <div className="space-y-2">
+            {bansData.bans.map((ban) => (
+              <BanRow key={ban.id} ban={ban} player={p} actions={actions} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -270,8 +271,9 @@ function GamemodeChanger({ player: p, serverId, actions }: { player: PlayerDto; 
   const { data } = useGamemode(serverId, p.username);
   return (
     <Select value={data?.gamemode ?? undefined} onValueChange={(v) => actions.onSetGamemode(p.username, v as PlayerGamemode)} disabled={!p.online}>
-      <SelectTrigger className="w-full">
-        <div className="flex items-center gap-1.5 overflow-hidden">
+      {/* Matches buttonVariants({variant:"outline", size:"sm"}) exactly (h-8, text-xs, rounded-md border shadow-sm) so it lines up with its sibling quick-action buttons instead of using Select's own (taller) default box. */}
+      <SelectTrigger className="h-8 w-full gap-1.5 rounded-md border-input px-3 text-xs shadow-sm">
+        <div className="flex min-w-0 items-center gap-1.5">
           <Gamepad2 className="h-3.5 w-3.5 shrink-0" />
           <SelectValue placeholder="Gamemode" />
         </div>

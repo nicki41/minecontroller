@@ -4,6 +4,7 @@ import type { PlayerDto } from "@minecraftpanel/shared";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SkinViewer3D } from "./SkinViewer3D";
+import { PlayerStatusChip } from "./PlayerStatusChip";
 import { useCopyField } from "./useCopyField";
 import type { PlayerActionHandlers } from "./playerActions";
 import { PlayerGeneralTab } from "./tabs/PlayerGeneralTab";
@@ -48,11 +49,12 @@ export function PlayerDetailModal({ player: p, serverId, actions, initialCompose
         </div>
 
         <div className="flex h-[600px] flex-col overflow-hidden p-6">
-          <div className="mb-1 flex items-center gap-1.5">
+          <div className="mb-1 flex items-center gap-2">
             <div className="text-xl font-bold">{p.username}</div>
             <button onClick={() => copy("username", p.username)} className="text-muted-foreground hover:text-foreground" title="Copy username">
               {copiedField === "username" ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
             </button>
+            <PlayerStatusChip player={p} className="ml-1" />
           </div>
           <div className="mb-4 flex items-center gap-1.5">
             <span className="font-mono text-xs text-muted-foreground">{p.uuid ?? "Unknown UUID"}</span>

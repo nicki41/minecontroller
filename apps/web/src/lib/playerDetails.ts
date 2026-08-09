@@ -103,6 +103,20 @@ export function useSetGamemode(serverId: string) {
   return useMutation({
     mutationFn: ({ username, mode }: { username: string; mode: PlayerGamemode }) =>
       api.post(`/servers/${serverId}/players/${encoded(username)}/gamemode`, { mode }),
-    onSuccess: (_data, { username }) => qc.invalidateQueries({ queryKey: ["servers", serverId, "players", username, "gamemode"] }),
+    // Optimistic, and deliberately never invalidated on success: gamemode is
+    // read back from the player's on-disk NBT file, which the Minecraft
+    // server only flushes periodically/on disconnect — refetching right
+    // after the RCON command returns would just read the still-stale value
+    // and make the UI appear to "snap back" to the old gamemode.
+    onMutate: async ({ username, mode }) => {
+      const key = ["servers", serverId, "players", username, "gamemode"];
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData<PlayerGamemodeDto>(key);
+      qc.setQueryData<PlayerGamemodeDto>(key, { gamemode: mode });
+      return { previous, key };
+    },
+    onError: (_err, _vars, context) => {
+      if (context) qc.setQueryData(context.key, context.previous);
+    },
   });
 }
