@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Filter, Info, Search, Users, X } from "lucide-react";
+import { Filter, Search, Users, X } from "lucide-react";
 import type { PlayerDto } from "@minecraftpanel/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,7 +77,6 @@ export default function ServerPlayersPage() {
   const [minPlaytimeHours, setMinPlaytimeHours] = useState("");
   const [selected, setSelected] = useState<{ username: string; compose: boolean } | null>(null);
 
-  const isRunning = server.status === "RUNNING";
   const hasFullAccess = server.myAccessLevel === "FULL";
   const canOp = hasFullAccess && hasPermission("players.op");
   const canWhitelist = hasFullAccess && hasPermission("players.whitelist");
@@ -167,7 +166,6 @@ export default function ServerPlayersPage() {
     return result;
   }, [players, search, statuses, sort, minPlaytimeHours]);
 
-  const onlineCount = players.filter((p) => p.online && !p.banned).length;
   const selectedPlayer: PlayerDto | null = selected ? (players.find((p) => p.username === selected.username) ?? null) : null;
 
   const activeFilterCount = statuses.size + (Number(minPlaytimeHours) > 0 ? 1 : 0);
@@ -189,27 +187,7 @@ export default function ServerPlayersPage() {
 
   return (
     <div className="space-y-4">
-      {!isRunning && (
-        <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
-          <Info className="h-4 w-4 shrink-0" />
-          Start the server to manage players — actions run as live commands against the running server.
-        </div>
-      )}
-
-      <div className="flex items-end justify-between gap-4">
-        <h1 className="text-lg font-semibold">Players</h1>
-        <div className="flex gap-4 text-right">
-          <div>
-            <div className="text-xl font-bold text-primary">{onlineCount}</div>
-            <div className="text-xs text-muted-foreground">Online</div>
-          </div>
-          <div className="w-px bg-border" />
-          <div>
-            <div className="text-xl font-bold">{players.length}</div>
-            <div className="text-xs text-muted-foreground">Total</div>
-          </div>
-        </div>
-      </div>
+      <h1 className="text-lg font-semibold">Players</h1>
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 basis-64">

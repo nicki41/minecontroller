@@ -1,11 +1,31 @@
+import os from "node:os";
+import path from "node:path";
+import fs from "node:fs/promises";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Server } from "@prisma/client";
 import { PlayerBanService, expireDueBans } from "./playerBans.service.js";
+
+// tempBan/banIp/unbanIp fall back to editing banned-players.json/banned-ips.json
+// directly when the server is stopped — point DATA_PATH at a fresh temp
+// directory per test, same convention as players.service.test.ts.
+vi.mock("../../config/env.js", () => ({
+  env: {
+    get DATA_PATH() {
+      return globalThis.__TEST_DATA_PATH__;
+    },
+  },
+}));
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __TEST_DATA_PATH__: string;
+}
 
 function makeServer(overrides: Partial<Server> = {}): Server {
   return {
     id: "srv-1",
     status: "RUNNING",
+    dataDir: "server1",
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...overrides,
   } as any as Server;
@@ -83,8 +103,11 @@ function makeFakePrisma() {
         .map((b) => ({ ...b, createdBy: null, revokedBy: null }));
     }),
   };
+  const playerProfile = {
+    findUnique: vi.fn(async () => null), // resolveUuid falls back to usercache.json in these tests
+  };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return { bans, playerBan } as any;
+  return { bans, playerBan, playerProfile } as any;
 }
 
 function makeFakeManager() {
@@ -97,10 +120,22 @@ function makeFakeManager() {
 }
 
 describe("PlayerBanService", () => {
-  beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
+  let tmpDataPath: string;
 
-  it("tempBan sends a normal RCON ban and records an expiring PlayerBan row", async () => {
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    tmpDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "mcpanel-playerbans-"));
+    globalThis.__TEST_DATA_PATH__ = tmpDataPath;
+    await fs.mkdir(path.join(tmpDataPath, "server1"), { recursive: true });
+    await fs.writeFile(path.join(tmpDataPath, "server1", "usercache.json"), JSON.stringify([{ name: "Steve", uuid: "uuid-steve" }]));
+  });
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    await fs.rm(tmpDataPath, { recursive: true, force: true });
+  });
+
+  it("tempBan sends a normal RCON ban and records an expiring PlayerBan row when RUNNING", async () => {
     const prisma = makeFakePrisma();
     const { manager, sent } = makeFakeManager();
     const service = new PlayerBanService(manager, prisma);
@@ -114,15 +149,22 @@ describe("PlayerBanService", () => {
     expect(prisma.bans[0].createdById).toBe("user-1");
   });
 
-  it("refuses to tempban when the server isn't running", async () => {
+  it("tempBan writes a banned-players.json entry with a real expiry when STOPPED, instead of using RCON", async () => {
     const prisma = makeFakePrisma();
-    const { manager } = makeFakeManager();
+    const { manager, sent } = makeFakeManager();
     const service = new PlayerBanService(manager, prisma);
 
-    await expect(service.tempBan(makeServer({ status: "STOPPED" }), "Steve", 60, "user-1")).rejects.toThrow();
+    await service.tempBan(makeServer({ status: "STOPPED" }), "Steve", 60, "user-1", "Griefing");
+
+    expect(sent).toHaveLength(0);
+    const banned = JSON.parse(await fs.readFile(path.join(tmpDataPath, "server1", "banned-players.json"), "utf8"));
+    expect(banned).toHaveLength(1);
+    expect(banned[0]).toMatchObject({ uuid: "uuid-steve", name: "Steve", reason: "Griefing" });
+    expect(banned[0].expires).not.toBe("forever");
+    expect(prisma.bans[0].expiresAt).not.toBeNull();
   });
 
-  it("banIp sends ban-ip and records an IP-type PlayerBan row", async () => {
+  it("banIp sends ban-ip and records an IP-type PlayerBan row when RUNNING", async () => {
     const prisma = makeFakePrisma();
     const { manager, sent } = makeFakeManager();
     const service = new PlayerBanService(manager, prisma);
@@ -134,7 +176,20 @@ describe("PlayerBanService", () => {
     expect(prisma.bans[0].target).toBe("203.0.113.11");
   });
 
-  it("unbanIp sends pardon-ip and revokes matching open IP bans", async () => {
+  it("banIp writes a banned-ips.json entry when STOPPED, instead of using RCON", async () => {
+    const prisma = makeFakePrisma();
+    const { manager, sent } = makeFakeManager();
+    const service = new PlayerBanService(manager, prisma);
+
+    await service.banIp(makeServer({ status: "STOPPED" }), "Steve", "203.0.113.11", "user-1", "Ban evasion");
+
+    expect(sent).toHaveLength(0);
+    const bannedIps = JSON.parse(await fs.readFile(path.join(tmpDataPath, "server1", "banned-ips.json"), "utf8"));
+    expect(bannedIps).toEqual([expect.objectContaining({ ip: "203.0.113.11", reason: "Ban evasion" })]);
+    expect(prisma.bans[0].type).toBe("IP");
+  });
+
+  it("unbanIp sends pardon-ip and revokes matching open IP bans when RUNNING", async () => {
     const prisma = makeFakePrisma();
     const { manager, sent } = makeFakeManager();
     const service = new PlayerBanService(manager, prisma);
@@ -145,6 +200,21 @@ describe("PlayerBanService", () => {
     expect(sent).toContainEqual({ serverId: "srv-1", command: "pardon-ip 203.0.113.11" });
     expect(prisma.bans[0].revokedAt).not.toBeNull();
     expect(prisma.bans[0].revokedById).toBe("user-2");
+  });
+
+  it("unbanIp removes the banned-ips.json entry when STOPPED, instead of using RCON", async () => {
+    const prisma = makeFakePrisma();
+    const { manager, sent } = makeFakeManager();
+    const service = new PlayerBanService(manager, prisma);
+    const server = makeServer({ status: "STOPPED" });
+    await service.banIp(server, "Steve", "203.0.113.11", "user-1");
+    sent.length = 0;
+
+    await service.unbanIp(server, "203.0.113.11", "user-2");
+
+    expect(sent).toHaveLength(0);
+    const bannedIps = JSON.parse(await fs.readFile(path.join(tmpDataPath, "server1", "banned-ips.json"), "utf8"));
+    expect(bannedIps).toEqual([]);
   });
 
   it("revokeNameBans marks open NAME bans for a username as revoked", async () => {

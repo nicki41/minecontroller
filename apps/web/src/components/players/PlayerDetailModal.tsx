@@ -3,11 +3,11 @@ import { Check, Copy } from "lucide-react";
 import type { PlayerDto } from "@minecraftpanel/shared";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { SkinViewer3D } from "./SkinViewer3D";
 import { PlayerStatusChip } from "./PlayerStatusChip";
 import { useCopyField } from "./useCopyField";
 import type { PlayerActionHandlers } from "./playerActions";
-import { PlayerGeneralTab } from "./tabs/PlayerGeneralTab";
 import { PlayerActivityTab } from "./tabs/PlayerActivityTab";
 import { PlayerModerationTab } from "./tabs/PlayerModerationTab";
 import { PlayerStatsTab } from "./tabs/PlayerStatsTab";
@@ -24,10 +24,10 @@ interface PlayerDetailModalProps {
 
 export function PlayerDetailModal({ player: p, serverId, actions, initialCompose, onClose, onSendMessage, sending }: PlayerDetailModalProps) {
   const { copiedField, copy } = useCopyField();
-  const [tab, setTab] = useState(initialCompose ? "moderation" : "general");
+  const [tab, setTab] = useState(initialCompose ? "moderation" : "activity");
 
   useEffect(() => {
-    setTab(initialCompose ? "moderation" : "general");
+    setTab(initialCompose ? "moderation" : "activity");
   }, [p?.username, initialCompose]);
 
   if (!p) return null;
@@ -54,9 +54,8 @@ export function PlayerDetailModal({ player: p, serverId, actions, initialCompose
             <button onClick={() => copy("username", p.username)} className="text-muted-foreground hover:text-foreground" title="Copy username">
               {copiedField === "username" ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
             </button>
-            <PlayerStatusChip player={p} className="ml-1" />
           </div>
-          <div className="mb-4 flex items-center gap-1.5">
+          <div className="mb-2.5 flex items-center gap-1.5">
             <span className="font-mono text-xs text-muted-foreground">{p.uuid ?? "Unknown UUID"}</span>
             {p.uuid && (
               <button onClick={() => copy("uuid", p.uuid!)} className="text-muted-foreground hover:text-foreground" title="Copy UUID">
@@ -64,19 +63,28 @@ export function PlayerDetailModal({ player: p, serverId, actions, initialCompose
               </button>
             )}
           </div>
+          <div className="mb-4 flex flex-wrap items-center gap-1.5">
+            <PlayerStatusChip player={p} />
+            {p.whitelisted && (
+              <Badge variant="outline" className="border-transparent bg-amber-500/15 text-amber-500">
+                Whitelisted
+              </Badge>
+            )}
+            {p.op && (
+              <Badge variant="outline" className="border-transparent bg-violet-500/15 text-violet-400">
+                Operator
+              </Badge>
+            )}
+          </div>
 
           <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
             <TabsList className="shrink-0">
-              <TabsTrigger value="general">General</TabsTrigger>
               <TabsTrigger value="activity">Activity</TabsTrigger>
               <TabsTrigger value="moderation">Moderation</TabsTrigger>
               <TabsTrigger value="stats">Ingame Statistic</TabsTrigger>
             </TabsList>
 
             <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
-              <TabsContent value="general" className="mt-0">
-                <PlayerGeneralTab player={p} />
-              </TabsContent>
               <TabsContent value="activity" className="mt-0">
                 <PlayerActivityTab player={p} serverId={serverId} />
               </TabsContent>

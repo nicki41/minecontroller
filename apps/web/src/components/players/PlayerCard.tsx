@@ -158,6 +158,7 @@ export function PlayerCard({ player: p, actions }: PlayerCardProps) {
             size="icon"
             className="h-8 flex-1"
             title="Message"
+            disabled={!p.online}
             onClick={(e) => {
               e.stopPropagation();
               actions.onOpenMessage(p.username);

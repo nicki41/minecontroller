@@ -1,15 +1,9 @@
 import type { PrismaClient, Server } from "@prisma/client";
 import type { PlayerBanDto } from "@minecraftpanel/shared";
-import { ConflictError } from "../../lib/errors.js";
 import type { MinecraftServerManager } from "../../minecraft/MinecraftServerManager.js";
 import { assertValidUsername, sanitizeReason } from "./players.service.js";
+import { addBannedPlayerEntry, addBannedIpEntry, removeBannedIpEntry } from "./playerFileEdits.service.js";
 import { logger } from "../../lib/logger.js";
-
-async function requireRunning(server: Pick<Server, "status">): Promise<void> {
-  if (server.status !== "RUNNING") {
-    throw new ConflictError("The server must be running to manage bans.");
-  }
-}
 
 function toBanDto(
   row: {
@@ -40,12 +34,15 @@ function toBanDto(
 }
 
 /**
- * Ban-history bookkeeping layered on top of PlayerService's existing RCON
- * kick/ban/unban — tempban and IP-ban aren't in vanilla's `/ban` at all (no
- * duration support), and ban-ip/pardon-ip exist but nothing anywhere
- * persisted *why* a ban happened or when it should lapse. Every mutating
- * method here follows the same assertValidUsername -> requireRunning ->
- * sendCommand shape as PlayerService, then records/updates a PlayerBan row.
+ * Ban-history bookkeeping layered on top of PlayerService's existing
+ * op/whitelist/ban/unban — tempban and IP-ban aren't in vanilla's `/ban` at
+ * all (no duration support), and ban-ip/pardon-ip exist but nothing
+ * anywhere persisted *why* a ban happened or when it should lapse. Works
+ * whether the server is RUNNING (RCON) or stopped (direct edit of
+ * banned-players.json/banned-ips.json — tempban's expiry reuses vanilla's
+ * own "expires" field in banned-players.json, the same mechanism a running
+ * server's `/ban` + our own auto-expiry check uses), then records/updates a
+ * PlayerBan row either way so history stays consistent regardless of path.
  */
 export class PlayerBanService {
   constructor(
@@ -55,11 +52,14 @@ export class PlayerBanService {
 
   async tempBan(server: Server, username: string, durationMinutes: number, actorUserId: string, reason?: string): Promise<void> {
     assertValidUsername(username);
-    await requireRunning(server);
     const cleanReason = sanitizeReason(reason);
-    await this.manager.sendCommand(server.id, cleanReason ? `ban ${username} ${cleanReason}` : `ban ${username}`);
-
     const expiresAt = new Date(Date.now() + durationMinutes * 60_000);
+    if (server.status === "RUNNING") {
+      await this.manager.sendCommand(server.id, cleanReason ? `ban ${username} ${cleanReason}` : `ban ${username}`);
+    } else {
+      await addBannedPlayerEntry(this.prisma, server, username, cleanReason, expiresAt);
+    }
+
     await this.prisma.playerBan.create({
       data: {
         serverId: server.id,
@@ -76,9 +76,12 @@ export class PlayerBanService {
 
   async banIp(server: Server, contextUsername: string, ip: string, actorUserId: string, reason?: string): Promise<void> {
     assertValidUsername(contextUsername);
-    await requireRunning(server);
     const cleanReason = sanitizeReason(reason);
-    await this.manager.sendCommand(server.id, cleanReason ? `ban-ip ${ip} ${cleanReason}` : `ban-ip ${ip}`);
+    if (server.status === "RUNNING") {
+      await this.manager.sendCommand(server.id, cleanReason ? `ban-ip ${ip} ${cleanReason}` : `ban-ip ${ip}`);
+    } else {
+      await addBannedIpEntry(server, ip, cleanReason);
+    }
 
     await this.prisma.playerBan.create({
       data: {
@@ -94,8 +97,11 @@ export class PlayerBanService {
   }
 
   async unbanIp(server: Server, ip: string, actorUserId: string): Promise<void> {
-    await requireRunning(server);
-    await this.manager.sendCommand(server.id, `pardon-ip ${ip}`);
+    if (server.status === "RUNNING") {
+      await this.manager.sendCommand(server.id, `pardon-ip ${ip}`);
+    } else {
+      await removeBannedIpEntry(server, ip);
+    }
 
     await this.prisma.playerBan.updateMany({
       where: { serverId: server.id, type: "IP", target: ip, revokedAt: null },

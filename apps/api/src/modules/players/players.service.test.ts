@@ -201,6 +201,101 @@ describe("PlayerService", () => {
     });
   });
 
+  describe("op/whitelist/ban while the server is RUNNING", () => {
+    it("op/deop/whitelistAdd/whitelistRemove/ban/unban all go through RCON", async () => {
+      const manager = makeFakeManager(async () => "");
+      const prisma = makeFakePrisma([]);
+      const service = new PlayerService(manager, prisma);
+      const server = makeServer({ status: "RUNNING" });
+
+      await service.op(server, "Steve");
+      await service.deop(server, "Steve");
+      await service.whitelistAdd(server, "Steve");
+      await service.whitelistRemove(server, "Steve");
+      await service.ban(server, "Steve", "Griefing");
+      await service.unban(server, "Steve");
+
+      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", "op Steve");
+      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", "deop Steve");
+      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", "whitelist add Steve");
+      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", "whitelist remove Steve");
+      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", "ban Steve Griefing");
+      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", "pardon Steve");
+    });
+  });
+
+  describe("op/whitelist/ban while the server is STOPPED (direct file edits)", () => {
+    const uuid = "uuid-steve";
+
+    beforeEach(async () => {
+      await fs.writeFile(path.join(tmpDataPath, "server1", "usercache.json"), JSON.stringify([{ name: "Steve", uuid }]));
+    });
+
+    it("op writes an ops.json entry, deop removes it", async () => {
+      const manager = makeFakeManager(async () => {
+        throw new Error("RCON should never be called while stopped");
+      });
+      const prisma = makeFakePrisma([]);
+      const service = new PlayerService(manager, prisma);
+      const server = makeServer({ status: "STOPPED" });
+
+      await service.op(server, "Steve");
+      let ops = JSON.parse(await fs.readFile(path.join(tmpDataPath, "server1", "ops.json"), "utf8"));
+      expect(ops).toEqual([{ uuid, name: "Steve", level: 4, bypassesPlayerLimit: false }]);
+
+      await service.deop(server, "Steve");
+      ops = JSON.parse(await fs.readFile(path.join(tmpDataPath, "server1", "ops.json"), "utf8"));
+      expect(ops).toEqual([]);
+    });
+
+    it("whitelistAdd writes a whitelist.json entry, whitelistRemove removes it", async () => {
+      const manager = makeFakeManager(async () => {
+        throw new Error("RCON should never be called while stopped");
+      });
+      const prisma = makeFakePrisma([]);
+      const service = new PlayerService(manager, prisma);
+      const server = makeServer({ status: "STOPPED" });
+
+      await service.whitelistAdd(server, "Steve");
+      let whitelist = JSON.parse(await fs.readFile(path.join(tmpDataPath, "server1", "whitelist.json"), "utf8"));
+      expect(whitelist).toEqual([{ uuid, name: "Steve" }]);
+
+      await service.whitelistRemove(server, "Steve");
+      whitelist = JSON.parse(await fs.readFile(path.join(tmpDataPath, "server1", "whitelist.json"), "utf8"));
+      expect(whitelist).toEqual([]);
+    });
+
+    it("ban writes a permanent banned-players.json entry with the reason, unban removes it", async () => {
+      const manager = makeFakeManager(async () => {
+        throw new Error("RCON should never be called while stopped");
+      });
+      const prisma = makeFakePrisma([]);
+      const service = new PlayerService(manager, prisma);
+      const server = makeServer({ status: "STOPPED" });
+
+      await service.ban(server, "Steve", "Griefing");
+      let banned = JSON.parse(await fs.readFile(path.join(tmpDataPath, "server1", "banned-players.json"), "utf8"));
+      expect(banned).toHaveLength(1);
+      expect(banned[0]).toMatchObject({ uuid, name: "Steve", expires: "forever", reason: "Griefing" });
+
+      await service.unban(server, "Steve");
+      banned = JSON.parse(await fs.readFile(path.join(tmpDataPath, "server1", "banned-players.json"), "utf8"));
+      expect(banned).toEqual([]);
+    });
+
+    it("rejects op/whitelist/ban when the player's UUID isn't known yet", async () => {
+      await fs.writeFile(path.join(tmpDataPath, "server1", "usercache.json"), "[]");
+      const manager = makeFakeManager(async () => "");
+      const prisma = makeFakePrisma([]);
+      const service = new PlayerService(manager, prisma);
+      const server = makeServer({ status: "STOPPED" });
+
+      await expect(service.op(server, "Unknown")).rejects.toThrow();
+      await expect(service.whitelistAdd(server, "Unknown")).rejects.toThrow();
+      await expect(service.ban(server, "Unknown")).rejects.toThrow();
+    });
+  });
+
   describe("wipe", () => {
     it("deletes stats/playerdata files under the vanilla flat layout (world/stats, world/playerdata)", async () => {
       const uuid = "uuid-steve";

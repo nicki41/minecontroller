@@ -3,7 +3,7 @@ import type { PlayerDto, PlayerSessionsRange } from "@minecraftpanel/shared";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePlayerSessions, usePlayerStats } from "@/lib/playerDetails";
-import { formatLastSeen, formatPlaytime } from "@/lib/playerFormat";
+import { formatJoinDate, formatLastSeen, formatPlaytime } from "@/lib/playerFormat";
 import { PlaytimeChart } from "../PlaytimeChart";
 
 const RANGES: { key: PlayerSessionsRange; label: string }[] = [
@@ -28,13 +28,14 @@ export function PlayerActivityTab({ player: p, serverId }: PlayerActivityTabProp
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+        <Stat label="First seen" value={formatJoinDate(p.firstSeenAt)} />
         <Stat label="Last seen" value={formatLastSeen(p)} />
         <Stat label="Playtime" value={formatPlaytime(playtimeSeconds)} hint={playtimeSource} />
         <Stat label="Sessions" value={sessions ? String(sessions.sessionCount) : "—"} />
         <Stat label="Avg. session" value={sessions ? formatPlaytime(sessions.averageSessionSeconds) : "—"} />
+        <Stat label="Longest session" value={sessions ? formatPlaytime(sessions.longestSessionSeconds) : "—"} />
       </div>
-      <Stat label="Longest session" value={sessions ? formatPlaytime(sessions.longestSessionSeconds) : "—"} className="max-w-[220px]" />
 
       <div>
         <div className="mb-2 flex items-center justify-between">

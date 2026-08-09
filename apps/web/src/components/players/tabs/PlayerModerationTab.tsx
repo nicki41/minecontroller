@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Ban, LogOut, ShieldCheck, ShieldOff, ListPlus, ListX, ShieldX, Trash2, Clock, Globe, Gamepad2, Eye, EyeOff, MessageSquare } from "lucide-react";
+import { Ban, LogOut, ShieldCheck, ShieldOff, ListPlus, ListX, ShieldX, Trash2, Clock, Globe, Gamepad2, Eye, EyeOff, MessageSquare, Check, Copy } from "lucide-react";
 import type { PlayerBanDto, PlayerDto, PlayerGamemode } from "@minecraftpanel/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmActionDialog } from "../ConfirmActionDialog";
+import { useCopyField } from "../useCopyField";
 import type { PlayerActionHandlers } from "../playerActions";
 import { useGamemode, usePlayerBans, usePlayerIpHistory, usePlayerNameHistory } from "@/lib/playerDetails";
 import { formatDateTime, formatJoinDate } from "@/lib/playerFormat";
@@ -52,6 +53,8 @@ export function PlayerModerationTab({ player: p, serverId, actions, initialCompo
   const [showCompose, setShowCompose] = useState(initialCompose);
   const [messageText, setMessageText] = useState("");
   const [showIps, setShowIps] = useState(false);
+  const [showCurrentIp, setShowCurrentIp] = useState(false);
+  const { copiedField, copy } = useCopyField();
   const { data: bansData, isLoading: bansLoading } = usePlayerBans(serverId, p.username);
   const { data: nameHistoryData } = usePlayerNameHistory(serverId, p.username);
   const { data: ipHistoryData } = usePlayerIpHistory(serverId, p.username);
@@ -65,6 +68,27 @@ export function PlayerModerationTab({ player: p, serverId, actions, initialCompo
 
   return (
     <div className="space-y-6">
+      <div className="rounded-lg bg-muted/40 px-3 py-2.5">
+        <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">IP address</div>
+        <div className="mt-0.5 flex items-center justify-between gap-2">
+          <span className="font-mono text-sm font-medium">{!p.lastIp ? "Unknown" : showCurrentIp ? p.lastIp : "•••.•••.•••.•••"}</span>
+          {p.lastIp && (
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                onClick={() => setShowCurrentIp((v) => !v)}
+                className="text-muted-foreground hover:text-foreground"
+                title={showCurrentIp ? "Hide IP" : "Show IP"}
+              >
+                {showCurrentIp ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              </button>
+              <button onClick={() => copy("current-ip", p.lastIp!)} className="text-muted-foreground hover:text-foreground" title="Copy IP">
+                {copiedField === "current-ip" ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
       <div>
         <div className="mb-2 text-sm font-medium">Quick actions</div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -95,7 +119,7 @@ export function PlayerModerationTab({ player: p, serverId, actions, initialCompo
               />
             ))}
           {actions.canMessage && (
-            <Button variant="outline" size="sm" className="w-full" onClick={() => setShowCompose((v) => !v)}>
+            <Button variant="outline" size="sm" className="w-full" disabled={!p.online} onClick={() => setShowCompose((v) => !v)}>
               <MessageSquare className="h-3.5 w-3.5" /> Message
             </Button>
           )}

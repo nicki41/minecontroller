@@ -7,6 +7,7 @@ import { safeResolve } from "../../lib/safePath.js";
 import { BadRequestError, ConflictError } from "../../lib/errors.js";
 import { MinecraftServerManager } from "../../minecraft/MinecraftServerManager.js";
 import { resolveUuid, resolveWorldRoot, statsCandidatePaths, playerDataCandidatePaths, playerDataOldCandidatePaths } from "./playerData.service.js";
+import { addOpsEntry, removeOpsEntry, addWhitelistEntry, removeWhitelistEntry, addBannedPlayerEntry, removeBannedPlayerEntry } from "./playerFileEdits.service.js";
 import { logger } from "../../lib/logger.js";
 
 function sleep(ms: number): Promise<void> {
@@ -69,13 +70,13 @@ async function readJsonFile<T>(root: string, filename: string): Promise<T[]> {
 }
 
 /**
- * Every mutating action here requires the server to be RUNNING and goes
- * through RCON commands — Minecraft updates ops.json/whitelist.json/
- * banned-players.json itself when a command runs, so there's no separate
- * file-write path to keep in sync. Managing players while the server is
- * stopped (editing those JSON files directly) is a reasonable future
- * addition but out of scope here; the UI disables the actions with an
- * explanation instead of silently no-op'ing.
+ * op/whitelist/ban/unban work whether the server is running or not: while
+ * RUNNING they go through RCON (Minecraft then rewrites ops.json/
+ * whitelist.json/banned-players.json itself); while stopped, this edits
+ * those same JSON files directly (see playerFileEdits.service.ts) so the
+ * change is picked up the next time the server starts. kick/message/
+ * setGamemode stay RCON-only — they act on a live, connected player, which
+ * only exists while the server is running.
  */
 export class PlayerService {
   constructor(
@@ -163,26 +164,38 @@ export class PlayerService {
 
   async op(server: Server, username: string): Promise<void> {
     assertValidUsername(username);
-    await this.requireRunning(server);
-    await this.manager.sendCommand(server.id, `op ${username}`);
+    if (server.status === "RUNNING") {
+      await this.manager.sendCommand(server.id, `op ${username}`);
+      return;
+    }
+    await addOpsEntry(this.prisma, server, username);
   }
 
   async deop(server: Server, username: string): Promise<void> {
     assertValidUsername(username);
-    await this.requireRunning(server);
-    await this.manager.sendCommand(server.id, `deop ${username}`);
+    if (server.status === "RUNNING") {
+      await this.manager.sendCommand(server.id, `deop ${username}`);
+      return;
+    }
+    await removeOpsEntry(server, username);
   }
 
   async whitelistAdd(server: Server, username: string): Promise<void> {
     assertValidUsername(username);
-    await this.requireRunning(server);
-    await this.manager.sendCommand(server.id, `whitelist add ${username}`);
+    if (server.status === "RUNNING") {
+      await this.manager.sendCommand(server.id, `whitelist add ${username}`);
+      return;
+    }
+    await addWhitelistEntry(this.prisma, server, username);
   }
 
   async whitelistRemove(server: Server, username: string): Promise<void> {
     assertValidUsername(username);
-    await this.requireRunning(server);
-    await this.manager.sendCommand(server.id, `whitelist remove ${username}`);
+    if (server.status === "RUNNING") {
+      await this.manager.sendCommand(server.id, `whitelist remove ${username}`);
+      return;
+    }
+    await removeWhitelistEntry(server, username);
   }
 
   async kick(server: Server, username: string, reason?: string): Promise<void> {
@@ -194,15 +207,21 @@ export class PlayerService {
 
   async ban(server: Server, username: string, reason?: string): Promise<void> {
     assertValidUsername(username);
-    await this.requireRunning(server);
     const cleanReason = sanitizeReason(reason);
-    await this.manager.sendCommand(server.id, cleanReason ? `ban ${username} ${cleanReason}` : `ban ${username}`);
+    if (server.status === "RUNNING") {
+      await this.manager.sendCommand(server.id, cleanReason ? `ban ${username} ${cleanReason}` : `ban ${username}`);
+      return;
+    }
+    await addBannedPlayerEntry(this.prisma, server, username, cleanReason, null);
   }
 
   async unban(server: Server, username: string): Promise<void> {
     assertValidUsername(username);
-    await this.requireRunning(server);
-    await this.manager.sendCommand(server.id, `pardon ${username}`);
+    if (server.status === "RUNNING") {
+      await this.manager.sendCommand(server.id, `pardon ${username}`);
+      return;
+    }
+    await removeBannedPlayerEntry(server, username);
   }
 
   /** Vanilla's /gamemode command requires the target to be online — same as kick, the UI disables the action while offline rather than this throwing (RCON just replies "No player was found" harmlessly). */
