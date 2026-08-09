@@ -18,7 +18,7 @@ export function PlayerCard({ player: p, actions }: PlayerCardProps) {
   return (
     <div
       onClick={() => actions.onOpenDetail(p.username)}
-      className="cursor-pointer rounded-xl border border-border bg-card p-4 transition-colors hover:border-foreground/20"
+      className="flex h-full cursor-pointer flex-col rounded-xl border border-border bg-card p-4 transition-colors hover:border-foreground/20"
     >
       <div className="flex items-start gap-3">
         <div className="relative shrink-0">
@@ -44,18 +44,20 @@ export function PlayerCard({ player: p, actions }: PlayerCardProps) {
         </div>
       </div>
 
-      <div className="mt-3.5 grid grid-cols-2 gap-2">
-        <div className="rounded-md bg-muted/40 px-2.5 py-1.5">
-          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Last seen</div>
-          <div className="mt-0.5 text-sm font-medium">{formatLastSeen(p)}</div>
+      {/* Pinned to the card's bottom edge (mt-auto) regardless of how tall the badges row above grows — otherwise cards without WL/OP badges have their stats/buttons sitting higher than cards with badges in the same grid row. */}
+      <div className="mt-auto">
+        <div className="mt-3.5 grid grid-cols-2 gap-2">
+          <div className="rounded-md bg-muted/40 px-2.5 py-1.5">
+            <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Last seen</div>
+            <div className="mt-0.5 text-sm font-medium">{formatLastSeen(p)}</div>
+          </div>
+          <div className="rounded-md bg-muted/40 px-2.5 py-1.5">
+            <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Playtime</div>
+            <div className="mt-0.5 text-sm font-medium">{formatPlaytime(p.playtimeSeconds)}</div>
+          </div>
         </div>
-        <div className="rounded-md bg-muted/40 px-2.5 py-1.5">
-          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Playtime</div>
-          <div className="mt-0.5 text-sm font-medium">{formatPlaytime(p.playtimeSeconds)}</div>
-        </div>
-      </div>
 
-      <div className="mt-3 flex gap-1.5" onClick={(e) => e.stopPropagation()}>
+        <div className="mt-3 flex gap-1.5" onClick={(e) => e.stopPropagation()}>
         {actions.canKick && (
           <ConfirmActionDialog
             trigger={
@@ -164,6 +166,7 @@ export function PlayerCard({ player: p, actions }: PlayerCardProps) {
             <MessageSquare className="h-3.5 w-3.5" />
           </Button>
         )}
+        </div>
       </div>
     </div>
   );
