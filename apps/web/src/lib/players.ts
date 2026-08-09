@@ -44,3 +44,10 @@ export function useBanPlayer(serverId: string) {
 export function useUnbanPlayer(serverId: string) {
   return useAction(serverId, (u) => `/servers/${serverId}/players/${encodeURIComponent(u)}/unban`);
 }
+
+export function useMessagePlayer(serverId: string) {
+  return useMutation({
+    mutationFn: ({ username, message }: { username: string; message: string }) =>
+      api.post(`/servers/${serverId}/players/${encodeURIComponent(username)}/message`, { message }),
+  });
+}

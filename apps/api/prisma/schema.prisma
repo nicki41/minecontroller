@@ -183,8 +183,40 @@ model Server {
   auditLogs      AuditLog[]
   backups        Backup[]
   pluginInstalls PluginInstall[]
+  playerProfiles PlayerProfile[]
 
   @@index([status])
+}
+
+// ------------------------------------------------------------------
+// Player activity — populated by PlayerActivityTracker from live
+// server log output (join/leave/UUID/IP lines), independent of whether
+// anyone has the Players page open. Not a source of truth for
+// op/whitelist/ban status (that stays live from ops.json/whitelist.json/
+// banned-players.json + RCON, see PlayerService) — this only tracks
+// history that Minecraft itself doesn't persist anywhere readable.
+// ------------------------------------------------------------------
+
+model PlayerProfile {
+  id            String @id @default(cuid())
+  serverId      String
+  usernameLower String
+  username      String
+  uuid          String?
+
+  firstSeenAt          DateTime?
+  lastSeenAt           DateTime?
+  lastIp               String?
+  totalPlaytimeSeconds Int       @default(0)
+  /// Non-null while the player is currently connected — used to compute live playtime and to close the session on disconnect/reconcile.
+  currentSessionStartedAt DateTime?
+
+  updatedAt DateTime @updatedAt
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@unique([serverId, usernameLower])
+  @@index([serverId])
 }
 
 // ------------------------------------------------------------------

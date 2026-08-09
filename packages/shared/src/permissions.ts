@@ -23,6 +23,7 @@ export const PERMISSIONS = [
   "players.ban",
   "players.op",
   "players.whitelist",
+  "players.message",
 
   "plugins.view",
   "plugins.install",
@@ -92,6 +93,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<Exclude<SystemRoleName, "Owner">, P
     "players.ban",
     "players.op",
     "players.whitelist",
+    "players.message",
     "plugins.view",
     "plugins.install",
     "plugins.remove",
@@ -110,6 +112,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<Exclude<SystemRoleName, "Owner">, P
     "players.ban",
     "players.op",
     "players.whitelist",
+    "players.message",
   ],
   // Read-only across the board.
   Viewer: ["servers.view", "console.view", "files.view", "players.view", "plugins.view", "backups.view"],

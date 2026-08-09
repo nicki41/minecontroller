@@ -19,6 +19,7 @@ import authPlugin from "./plugins/auth.js";
 import minecraftPlugin from "./plugins/minecraft.js";
 import liveSessionsPlugin from "./plugins/liveSessions.js";
 import metricsHistoryPlugin from "./plugins/metricsHistory.js";
+import playerActivityPlugin from "./plugins/playerActivity.js";
 import { registerApiRoutes } from "./modules/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -91,6 +92,7 @@ export async function buildApp() {
   await app.register(minecraftPlugin);
   await app.register(liveSessionsPlugin);
   await app.register(metricsHistoryPlugin);
+  await app.register(playerActivityPlugin);
 
   await registerApiRoutes(app);
 

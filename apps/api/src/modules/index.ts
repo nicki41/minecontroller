@@ -9,6 +9,7 @@ import { serverConfigRoutes } from "./serverConfig/serverConfig.routes.js";
 import { modrinthRoutes } from "./modrinth/modrinth.routes.js";
 import { pluginsRoutes } from "./modrinth/plugins.routes.js";
 import { playersRoutes } from "./players/players.routes.js";
+import { mojangRoutes } from "./mojang/mojang.routes.js";
 import { usersRoutes } from "./users/users.routes.js";
 import { rolesRoutes } from "./roles/roles.routes.js";
 import { auditRoutes } from "./audit/audit.routes.js";
@@ -30,6 +31,7 @@ export async function registerApiRoutes(app: FastifyInstance) {
   await app.register(modrinthRoutes, { prefix: "/api/modrinth" });
   await app.register(pluginsRoutes, { prefix: "/api/servers/:id/plugins" });
   await app.register(playersRoutes, { prefix: "/api/servers/:id/players" });
+  await app.register(mojangRoutes, { prefix: "/api/players" });
   await app.register(usersRoutes, { prefix: "/api/users" });
   await app.register(rolesRoutes, { prefix: "/api/roles" });
   await app.register(auditRoutes, { prefix: "/api/audit-log" });

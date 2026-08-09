@@ -1,10 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import { banPlayerSchema } from "@minecraftpanel/shared";
+import { banPlayerSchema, messagePlayerSchema } from "@minecraftpanel/shared";
 import { PlayerService } from "./players.service.js";
 import { AuditAction } from "../audit/audit.service.js";
 
 export async function playersRoutes(fastify: FastifyInstance) {
-  const playerService = new PlayerService(fastify.serverManager);
+  const playerService = new PlayerService(fastify.serverManager, fastify.prisma);
 
   fastify.get("/", { preHandler: fastify.requireServerAccess("players.view") }, async (request, reply) => {
     const players = await playerService.list(request.mcServer!);
@@ -89,4 +89,20 @@ export async function playersRoutes(fastify: FastifyInstance) {
     );
     return reply.status(204).send();
   });
+
+  fastify.post(
+    "/:username/message",
+    { preHandler: fastify.requireServerAccess("players.message") },
+    async (request, reply) => {
+      const { username } = request.params as { username: string };
+      const { message } = messagePlayerSchema.parse(request.body);
+      await playerService.message(request.mcServer!, username, message);
+      await fastify.audit.record(
+        AuditAction.PLAYER_MESSAGE,
+        { userId: request.user!.id, serverId: request.mcServer!.id, ipAddress: request.ip },
+        { username },
+      );
+      return reply.status(204).send();
+    },
+  );
 }

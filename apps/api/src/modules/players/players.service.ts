@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { Server } from "@prisma/client";
+import type { PrismaClient, Server } from "@prisma/client";
 import type { PlayerDto } from "@minecraftpanel/shared";
 import { env } from "../../config/env.js";
 import { safeResolve } from "../../lib/safePath.js";
@@ -26,6 +26,12 @@ function sanitizeReason(reason: string | undefined): string | undefined {
   if (!reason) return undefined;
   const cleaned = reason.replace(/[\r\n]+/g, " ").trim();
   return cleaned || undefined;
+}
+
+function sanitizeMessage(message: string): string {
+  const cleaned = message.replace(/[\r\n]+/g, " ").trim();
+  if (!cleaned) throw new BadRequestError("Message cannot be empty.");
+  return cleaned;
 }
 
 interface OpsEntry {
@@ -66,16 +72,20 @@ async function readJsonFile<T>(root: string, filename: string): Promise<T[]> {
  * explanation instead of silently no-op'ing.
  */
 export class PlayerService {
-  constructor(private readonly manager: MinecraftServerManager) {}
+  constructor(
+    private readonly manager: MinecraftServerManager,
+    private readonly prisma: PrismaClient,
+  ) {}
 
   async list(server: Server): Promise<PlayerDto[]> {
     const root = path.join(env.DATA_PATH, server.dataDir);
-    const [ops, whitelist, banned, cache, online] = await Promise.all([
+    const [ops, whitelist, banned, cache, online, profiles] = await Promise.all([
       readJsonFile<OpsEntry>(root, "ops.json"),
       readJsonFile<WhitelistEntry>(root, "whitelist.json"),
       readJsonFile<BannedPlayerEntry>(root, "banned-players.json"),
       readJsonFile<UserCacheEntry>(root, "usercache.json"),
       this.getOnlinePlayerNames(server),
+      this.prisma.playerProfile.findMany({ where: { serverId: server.id } }),
     ]);
 
     const byName = new Map<string, PlayerDto>();
@@ -83,7 +93,18 @@ export class PlayerService {
       const key = name.toLowerCase();
       let entry = byName.get(key);
       if (!entry) {
-        entry = { username: name, uuid, online: false, op: false, whitelisted: false, banned: false };
+        entry = {
+          username: name,
+          uuid,
+          online: false,
+          op: false,
+          whitelisted: false,
+          banned: false,
+          firstSeenAt: null,
+          lastSeenAt: null,
+          playtimeSeconds: 0,
+          lastIp: null,
+        };
         byName.set(key, entry);
       } else if (!entry.uuid && uuid) {
         entry.uuid = uuid;
@@ -96,6 +117,18 @@ export class PlayerService {
     for (const e of whitelist) ensure(e.name, e.uuid).whitelisted = true;
     for (const e of banned) ensure(e.name, e.uuid).banned = true;
     for (const name of online) ensure(name, null).online = true;
+
+    const now = Date.now();
+    for (const profile of profiles) {
+      const entry = ensure(profile.username, profile.uuid);
+      entry.firstSeenAt = profile.firstSeenAt?.toISOString() ?? null;
+      entry.lastSeenAt = profile.lastSeenAt?.toISOString() ?? null;
+      entry.lastIp = profile.lastIp;
+      const liveSeconds = profile.currentSessionStartedAt
+        ? Math.max(0, Math.round((now - profile.currentSessionStartedAt.getTime()) / 1000))
+        : 0;
+      entry.playtimeSeconds = profile.totalPlaytimeSeconds + liveSeconds;
+    }
 
     return [...byName.values()].sort((a, b) => a.username.localeCompare(b.username));
   }
@@ -164,5 +197,12 @@ export class PlayerService {
     assertValidUsername(username);
     await this.requireRunning(server);
     await this.manager.sendCommand(server.id, `pardon ${username}`);
+  }
+
+  async message(server: Server, username: string, text: string): Promise<void> {
+    assertValidUsername(username);
+    await this.requireRunning(server);
+    const cleanText = sanitizeMessage(text);
+    await this.manager.sendCommand(server.id, `tell ${username} ${cleanText}`);
   }
 }

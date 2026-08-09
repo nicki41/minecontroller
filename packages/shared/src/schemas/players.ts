@@ -9,3 +9,8 @@ export const whitelistAddSchema = z.object({
   username: z.string().trim().min(1).max(16),
 });
 export type WhitelistAddInput = z.infer<typeof whitelistAddSchema>;
+
+export const messagePlayerSchema = z.object({
+  message: z.string().trim().min(1).max(256),
+});
+export type MessagePlayerInput = z.infer<typeof messagePlayerSchema>;

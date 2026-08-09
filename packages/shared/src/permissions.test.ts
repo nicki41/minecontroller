@@ -78,11 +78,17 @@ describe("effectiveServerPermissions", () => {
 describe("SYSTEM_ROLE_PERMISSIONS", () => {
   it("keeps Viewer strictly read-only (no create/delete/execute/install/restore permissions)", () => {
     const mutating = SYSTEM_ROLE_PERMISSIONS.Viewer.filter((p) =>
-      /\.(create|delete|start|stop|restart|execute|edit|upload|install|remove|kick|ban|op|whitelist|restore)$|settings\.edit$/.test(
+      /\.(create|delete|start|stop|restart|execute|edit|upload|install|remove|kick|ban|op|whitelist|message|restore)$|settings\.edit$/.test(
         p,
       ),
     );
     expect(mutating).toEqual([]);
+  });
+
+  it("keeps players.message out of VIEW_ONLY server access, even for a role that has it", () => {
+    const result = effectiveServerPermissions(["players.view", "players.message"], "VIEW_ONLY");
+    expect(result.has("players.view")).toBe(true);
+    expect(result.has("players.message")).toBe(false);
   });
 
   it("never grants Manager user/role administration permissions", () => {

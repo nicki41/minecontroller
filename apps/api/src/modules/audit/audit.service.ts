@@ -48,6 +48,7 @@ export const AuditAction = {
   PLAYER_KICK: "player.kick",
   PLAYER_BAN: "player.ban",
   PLAYER_UNBAN: "player.unban",
+  PLAYER_MESSAGE: "player.message",
   BACKUP_CREATE: "backup.create",
   BACKUP_RESTORE: "backup.restore",
   BACKUP_DELETE: "backup.delete",
