@@ -28,6 +28,34 @@ function ratio(numerator: number, denominator: number | null): number | null {
   return numerator / denominator;
 }
 
+/**
+ * Vanilla/Fabric/Forge/NeoForge store per-player files flat under the world
+ * folder (world/stats/<uuid>.json, world/playerdata/<uuid>.dat). Paper
+ * reorganizes them under world/players/{stats,data}/ instead — confirmed
+ * directly against a live Paper server's actual disk layout, not just
+ * documented behavior. Every reader tries both locations rather than
+ * branching on server.software, since that's strictly more robust than
+ * trusting the DB's software field to always match what's really on disk.
+ */
+export function statsCandidatePaths(uuid: string): string[] {
+  return [`players/stats/${uuid}.json`, `stats/${uuid}.json`];
+}
+export function playerDataCandidatePaths(uuid: string): string[] {
+  return [`players/data/${uuid}.dat`, `playerdata/${uuid}.dat`];
+}
+export function playerDataOldCandidatePaths(uuid: string): string[] {
+  return [`players/data/${uuid}.dat_old`, `playerdata/${uuid}.dat_old`];
+}
+
+async function resolveExistingPath(worldRoot: string, candidates: string[]): Promise<string | null> {
+  for (const rel of candidates) {
+    const abs = await safeResolve(worldRoot, rel);
+    const stat = await fs.stat(abs).catch(() => null);
+    if (stat) return abs;
+  }
+  return null;
+}
+
 /** Pure mapping from vanilla's stats/<uuid>.json shape to our curated DTO — exported separately so it's testable without touching the filesystem. */
 export function mapStatsJson(raw: unknown): PlayerStatsDto {
   const stats = (raw as { stats?: Record<string, Record<string, number>> } | null)?.stats ?? {};
@@ -116,7 +144,8 @@ export class PlayerDataService {
 
   async readStats(server: Server, uuid: string): Promise<PlayerStatsDto | null> {
     const worldRoot = await resolveWorldRoot(server);
-    const statsPath = await safeResolve(worldRoot, `stats/${uuid}.json`);
+    const statsPath = await resolveExistingPath(worldRoot, statsCandidatePaths(uuid));
+    if (!statsPath) return null;
     const raw = await fs.readFile(statsPath, "utf8").catch(() => null);
     if (raw === null) return null;
     try {
@@ -128,7 +157,8 @@ export class PlayerDataService {
 
   async readGamemode(server: Server, uuid: string): Promise<PlayerGamemodeDto> {
     const worldRoot = await resolveWorldRoot(server);
-    const datPath = await safeResolve(worldRoot, `playerdata/${uuid}.dat`);
+    const datPath = await resolveExistingPath(worldRoot, playerDataCandidatePaths(uuid));
+    if (!datPath) return { gamemode: null };
     const buffer = await fs.readFile(datPath).catch(() => null);
     if (!buffer) return { gamemode: null };
     try {

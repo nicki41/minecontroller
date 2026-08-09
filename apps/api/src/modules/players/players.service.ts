@@ -6,7 +6,7 @@ import { env } from "../../config/env.js";
 import { safeResolve } from "../../lib/safePath.js";
 import { BadRequestError, ConflictError } from "../../lib/errors.js";
 import { MinecraftServerManager } from "../../minecraft/MinecraftServerManager.js";
-import { resolveUuid, resolveWorldRoot } from "./playerData.service.js";
+import { resolveUuid, resolveWorldRoot, statsCandidatePaths, playerDataCandidatePaths, playerDataOldCandidatePaths } from "./playerData.service.js";
 import { logger } from "../../lib/logger.js";
 
 function sleep(ms: number): Promise<void> {
@@ -242,7 +242,11 @@ export class PlayerService {
     }
 
     const worldRoot = await resolveWorldRoot(server);
-    const targets = [`stats/${uuid}.json`, `playerdata/${uuid}.dat`, `playerdata/${uuid}.dat_old`];
+    // Deletes at every candidate location (vanilla flat layout AND Paper's
+    // world/players/{stats,data} layout) rather than picking one — fs.rm
+    // with force:true silently no-ops on whichever path doesn't exist, so
+    // this is correct regardless of which layout this server actually uses.
+    const targets = [...statsCandidatePaths(uuid), ...playerDataCandidatePaths(uuid), ...playerDataOldCandidatePaths(uuid)];
     for (const relPath of targets) {
       try {
         const filePath = await safeResolve(worldRoot, relPath);

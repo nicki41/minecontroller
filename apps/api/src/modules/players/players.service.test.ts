@@ -35,6 +35,10 @@ function makeFakePrisma(profiles: FakeProfileRow[]) {
   return {
     playerProfile: {
       findMany: vi.fn(async () => profiles),
+      findUnique: vi.fn(async ({ where }: { where: { serverId_usernameLower: { usernameLower: string } } }) => {
+        const match = profiles.find((p) => p.username.toLowerCase() === where.serverId_usernameLower.usernameLower);
+        return match ?? null;
+      }),
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
@@ -194,6 +198,66 @@ describe("PlayerService", () => {
       const service = new PlayerService(manager, prisma);
 
       await expect(service.message(makeServer({ status: "STOPPED" }), "Steve", "hi")).rejects.toThrow();
+    });
+  });
+
+  describe("wipe", () => {
+    it("deletes stats/playerdata files under the vanilla flat layout (world/stats, world/playerdata)", async () => {
+      const uuid = "uuid-steve";
+      await fs.mkdir(path.join(tmpDataPath, "server1", "world", "stats"), { recursive: true });
+      await fs.mkdir(path.join(tmpDataPath, "server1", "world", "playerdata"), { recursive: true });
+      await fs.writeFile(path.join(tmpDataPath, "server1", "world", "stats", `${uuid}.json`), "{}");
+      await fs.writeFile(path.join(tmpDataPath, "server1", "world", "playerdata", `${uuid}.dat`), "x");
+
+      const manager = makeFakeManager(async (_id, cmd) => (cmd === "list" ? "There are 0 of a max of 20 players online:" : ""));
+      const prisma = makeFakePrisma([{ username: "Steve", uuid, firstSeenAt: null, lastSeenAt: null, lastIp: null, totalPlaytimeSeconds: 0, currentSessionStartedAt: null }]);
+      const service = new PlayerService(manager, prisma);
+
+      await service.wipe(makeServer({ status: "STOPPED" }), "Steve");
+
+      const statsExists = await fs.stat(path.join(tmpDataPath, "server1", "world", "stats", `${uuid}.json`)).catch(() => null);
+      const dataExists = await fs.stat(path.join(tmpDataPath, "server1", "world", "playerdata", `${uuid}.dat`)).catch(() => null);
+      expect(statsExists).toBeNull();
+      expect(dataExists).toBeNull();
+    });
+
+    it("deletes stats/playerdata files under Paper's world/players/{stats,data} layout too", async () => {
+      const uuid = "uuid-steve";
+      await fs.mkdir(path.join(tmpDataPath, "server1", "world", "players", "stats"), { recursive: true });
+      await fs.mkdir(path.join(tmpDataPath, "server1", "world", "players", "data"), { recursive: true });
+      await fs.writeFile(path.join(tmpDataPath, "server1", "world", "players", "stats", `${uuid}.json`), "{}");
+      await fs.writeFile(path.join(tmpDataPath, "server1", "world", "players", "data", `${uuid}.dat`), "x");
+
+      const manager = makeFakeManager(async (_id, cmd) => (cmd === "list" ? "There are 0 of a max of 20 players online:" : ""));
+      const prisma = makeFakePrisma([{ username: "Steve", uuid, firstSeenAt: null, lastSeenAt: null, lastIp: null, totalPlaytimeSeconds: 0, currentSessionStartedAt: null }]);
+      const service = new PlayerService(manager, prisma);
+
+      await service.wipe(makeServer({ status: "STOPPED" }), "Steve");
+
+      const statsExists = await fs.stat(path.join(tmpDataPath, "server1", "world", "players", "stats", `${uuid}.json`)).catch(() => null);
+      const dataExists = await fs.stat(path.join(tmpDataPath, "server1", "world", "players", "data", `${uuid}.dat`)).catch(() => null);
+      expect(statsExists).toBeNull();
+      expect(dataExists).toBeNull();
+    });
+
+    it("kicks the player first when they're currently online", async () => {
+      const uuid = "uuid-steve";
+      await fs.mkdir(path.join(tmpDataPath, "server1", "world", "stats"), { recursive: true });
+      const manager = makeFakeManager(async (_id, cmd) => (cmd === "list" ? "There are 1 of a max of 20 players online: Steve" : ""));
+      const prisma = makeFakePrisma([{ username: "Steve", uuid, firstSeenAt: null, lastSeenAt: null, lastIp: null, totalPlaytimeSeconds: 0, currentSessionStartedAt: null }]);
+      const service = new PlayerService(manager, prisma);
+
+      await service.wipe(makeServer({ status: "RUNNING" }), "Steve");
+
+      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", expect.stringContaining("kick Steve"));
+    });
+
+    it("rejects when no UUID is known for the player", async () => {
+      const manager = makeFakeManager(async () => "");
+      const prisma = makeFakePrisma([]);
+      const service = new PlayerService(manager, prisma);
+
+      await expect(service.wipe(makeServer(), "Unknown")).rejects.toThrow();
     });
   });
 });

@@ -6,7 +6,8 @@ export function usePlayers(serverId: string) {
   return useQuery({
     queryKey: ["servers", serverId, "players"],
     queryFn: () => api.get<{ players: PlayerDto[] }>(`/servers/${serverId}/players`),
-    refetchInterval: 15_000,
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
   });
 }
 

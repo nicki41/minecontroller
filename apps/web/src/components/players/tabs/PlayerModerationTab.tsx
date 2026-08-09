@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Ban, LogOut, ShieldCheck, ShieldOff, ListPlus, ListX, ShieldX, Trash2 } from "lucide-react";
-import type { PlayerBanDto, PlayerDto } from "@minecraftpanel/shared";
+import { Ban, LogOut, ShieldCheck, ShieldOff, ListPlus, ListX, ShieldX, Trash2, Clock, Globe, Gamepad2, Eye, EyeOff } from "lucide-react";
+import type { PlayerBanDto, PlayerDto, PlayerGamemode } from "@minecraftpanel/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,18 +18,26 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmActionDialog } from "../ConfirmActionDialog";
 import type { PlayerActionHandlers } from "../playerActions";
-import { usePlayerBans, usePlayerIpHistory, usePlayerNameHistory } from "@/lib/playerDetails";
+import { useGamemode, usePlayerBans, usePlayerIpHistory, usePlayerNameHistory } from "@/lib/playerDetails";
 import { formatDateTime, formatJoinDate } from "@/lib/playerFormat";
 
 const DURATION_PRESETS = [
-  { label: "10 minutes", minutes: 10 },
-  { label: "1 hour", minutes: 60 },
-  { label: "6 hours", minutes: 360 },
-  { label: "1 day", minutes: 1440 },
-  { label: "3 days", minutes: 4320 },
-  { label: "7 days", minutes: 10080 },
-  { label: "30 days", minutes: 43200 },
+  { label: "10m", minutes: 10 },
+  { label: "1h", minutes: 60 },
+  { label: "6h", minutes: 360 },
+  { label: "1d", minutes: 1440 },
+  { label: "3d", minutes: 4320 },
+  { label: "7d", minutes: 10080 },
+  { label: "30d", minutes: 43200 },
 ];
+
+const GAMEMODES: PlayerGamemode[] = ["SURVIVAL", "CREATIVE", "ADVENTURE", "SPECTATOR"];
+const GAMEMODE_LABEL: Record<PlayerGamemode, string> = {
+  SURVIVAL: "Survival",
+  CREATIVE: "Creative",
+  ADVENTURE: "Adventure",
+  SPECTATOR: "Spectator",
+};
 
 interface PlayerModerationTabProps {
   player: PlayerDto;
@@ -43,6 +51,7 @@ interface PlayerModerationTabProps {
 export function PlayerModerationTab({ player: p, serverId, actions, initialCompose, onSendMessage, sending }: PlayerModerationTabProps) {
   const [showCompose, setShowCompose] = useState(initialCompose);
   const [messageText, setMessageText] = useState("");
+  const [showIps, setShowIps] = useState(false);
   const { data: bansData, isLoading: bansLoading } = usePlayerBans(serverId, p.username);
   const { data: nameHistoryData } = usePlayerNameHistory(serverId, p.username);
   const { data: ipHistoryData } = usePlayerIpHistory(serverId, p.username);
@@ -155,6 +164,7 @@ export function PlayerModerationTab({ player: p, serverId, actions, initialCompo
                 onConfirm={() => actions.onOp(p.username)}
               />
             ))}
+          {actions.canOp && <GamemodeChanger player={p} serverId={serverId} actions={actions} />}
           {actions.canMessage && (
             <Button variant="outline" size="sm" className="w-full" onClick={() => setShowCompose((v) => !v)}>
               Message
@@ -225,14 +235,26 @@ export function PlayerModerationTab({ player: p, serverId, actions, initialCompo
           )}
         </div>
         <div>
-          <div className="mb-2 text-sm font-medium">IP history</div>
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-sm font-medium">IP history</div>
+            {!!ipHistoryData?.history.length && (
+              <button
+                onClick={() => setShowIps((v) => !v)}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                title={showIps ? "Hide IPs" : "Show IPs"}
+              >
+                {showIps ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                {showIps ? "Hide" : "Show"}
+              </button>
+            )}
+          </div>
           {!ipHistoryData?.history.length ? (
             <div className="text-sm text-muted-foreground">No IPs on record.</div>
           ) : (
             <ul className="space-y-1.5 text-sm">
               {ipHistoryData.history.map((entry, i) => (
                 <li key={i} className="flex items-center justify-between rounded-md bg-muted/40 px-2.5 py-1.5">
-                  <span className="font-mono">{entry.ip}</span>
+                  <span className="font-mono">{showIps ? entry.ip : "•••.•••.•••.•••"}</span>
                   <span className="text-xs text-muted-foreground">{formatJoinDate(entry.seenAt)}</span>
                 </li>
               ))}
@@ -241,6 +263,27 @@ export function PlayerModerationTab({ player: p, serverId, actions, initialCompo
         </div>
       </div>
     </div>
+  );
+}
+
+function GamemodeChanger({ player: p, serverId, actions }: { player: PlayerDto; serverId: string; actions: PlayerActionHandlers }) {
+  const { data } = useGamemode(serverId, p.username);
+  return (
+    <Select value={data?.gamemode ?? undefined} onValueChange={(v) => actions.onSetGamemode(p.username, v as PlayerGamemode)} disabled={!p.online}>
+      <SelectTrigger className="w-full">
+        <div className="flex items-center gap-1.5 overflow-hidden">
+          <Gamepad2 className="h-3.5 w-3.5 shrink-0" />
+          <SelectValue placeholder="Gamemode" />
+        </div>
+      </SelectTrigger>
+      <SelectContent>
+        {GAMEMODES.map((mode) => (
+          <SelectItem key={mode} value={mode}>
+            {GAMEMODE_LABEL[mode]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -298,7 +341,7 @@ function TempBanDialog({ player: p, actions }: { player: PlayerDto; actions: Pla
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="w-full">
-          Tempban
+          <Clock className="h-3.5 w-3.5" /> Tempban
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -308,18 +351,30 @@ function TempBanDialog({ player: p, actions }: { player: PlayerDto; actions: Pla
         <div className="space-y-3">
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Duration</Label>
-            <Select value={minutes} onValueChange={setMinutes}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {DURATION_PRESETS.map((preset) => (
-                  <SelectItem key={preset.minutes} value={String(preset.minutes)}>
-                    {preset.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex flex-wrap gap-1.5">
+              {DURATION_PRESETS.map((preset) => (
+                <Button
+                  key={preset.minutes}
+                  type="button"
+                  size="sm"
+                  variant={minutes === String(preset.minutes) ? "default" : "outline"}
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setMinutes(String(preset.minutes))}
+                >
+                  {preset.label}
+                </Button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={1}
+                value={minutes}
+                onChange={(e) => setMinutes(e.target.value)}
+                className="w-28"
+              />
+              <span className="text-xs text-muted-foreground">minutes</span>
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Reason (optional)</Label>
@@ -330,7 +385,7 @@ function TempBanDialog({ player: p, actions }: { player: PlayerDto; actions: Pla
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button variant="destructive" onClick={handleConfirm}>
+          <Button variant="destructive" disabled={!Number(minutes) || Number(minutes) < 1} onClick={handleConfirm}>
             Tempban
           </Button>
         </DialogFooter>
@@ -361,7 +416,7 @@ function IpBanDialog({ player: p, actions }: { player: PlayerDto; actions: Playe
     >
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="w-full">
-          IP ban
+          <Globe className="h-3.5 w-3.5" /> IP ban
         </Button>
       </DialogTrigger>
       <DialogContent>

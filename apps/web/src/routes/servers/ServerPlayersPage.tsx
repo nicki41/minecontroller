@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Info, Search, Users } from "lucide-react";
+import { Info, Search, SlidersHorizontal, Users } from "lucide-react";
 import type { PlayerDto } from "@minecraftpanel/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/layout/EmptyState";
 import { useAuth } from "@/lib/auth";
@@ -26,6 +28,7 @@ import type { PlayerActionHandlers } from "@/components/players/playerActions";
 import { useServerOutletContext } from "./useServerOutletContext";
 
 type FilterKey = "all" | "online" | "offline" | "banned" | "whitelisted" | "op";
+type SortKey = "online" | "name" | "lastSeen" | "playtime";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "All" },
@@ -36,12 +39,27 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "op", label: "OP" },
 ];
 
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: "online", label: "Online first" },
+  { key: "name", label: "Name (A–Z)" },
+  { key: "lastSeen", label: "Last seen (recent first)" },
+  { key: "playtime", label: "Playtime (most first)" },
+];
+
+function lastSeenTime(p: PlayerDto): number {
+  if (p.online) return Infinity;
+  return p.lastSeenAt ? new Date(p.lastSeenAt).getTime() : -Infinity;
+}
+
 export default function ServerPlayersPage() {
   const { server } = useServerOutletContext();
   const { hasPermission } = useAuth();
   const { data, isLoading } = usePlayers(server.id);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [sort, setSort] = useState<SortKey>("online");
+  const [minPlaytimeHours, setMinPlaytimeHours] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [selected, setSelected] = useState<{ username: string; compose: boolean } | null>(null);
 
   const isRunning = server.status === "RUNNING";
@@ -112,8 +130,10 @@ export default function ServerPlayersPage() {
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return players
+    const minSeconds = Number(minPlaytimeHours) > 0 ? Number(minPlaytimeHours) * 3600 : 0;
+    const result = players
       .filter((p) => !term || p.username.toLowerCase().includes(term))
+      .filter((p) => p.playtimeSeconds >= minSeconds)
       .filter((p) => {
         switch (filter) {
           case "online":
@@ -129,9 +149,23 @@ export default function ServerPlayersPage() {
           default:
             return true;
         }
-      })
-      .sort((a, b) => Number(b.online) - Number(a.online) || a.username.localeCompare(b.username));
-  }, [players, search, filter]);
+      });
+
+    switch (sort) {
+      case "name":
+        result.sort((a, b) => a.username.localeCompare(b.username));
+        break;
+      case "lastSeen":
+        result.sort((a, b) => lastSeenTime(b) - lastSeenTime(a));
+        break;
+      case "playtime":
+        result.sort((a, b) => b.playtimeSeconds - a.playtimeSeconds);
+        break;
+      default:
+        result.sort((a, b) => Number(b.online) - Number(a.online) || a.username.localeCompare(b.username));
+    }
+    return result;
+  }, [players, search, filter, sort, minPlaytimeHours]);
 
   const onlineCount = players.filter((p) => p.online && !p.banned).length;
   const selectedPlayer: PlayerDto | null = selected ? (players.find((p) => p.username === selected.username) ?? null) : null;
@@ -172,7 +206,41 @@ export default function ServerPlayersPage() {
             </Button>
           ))}
         </div>
+        <Button size="sm" variant={showAdvanced ? "default" : "outline"} onClick={() => setShowAdvanced((v) => !v)}>
+          <SlidersHorizontal className="h-3.5 w-3.5" /> Advanced
+        </Button>
       </div>
+
+      {showAdvanced && (
+        <div className="flex flex-wrap items-end gap-4 rounded-lg border border-border bg-muted/20 p-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Sort by</Label>
+            <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
+              <SelectTrigger className="w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SORTS.map((s) => (
+                  <SelectItem key={s.key} value={s.key}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Min. playtime (hours)</Label>
+            <Input
+              type="number"
+              min={0}
+              value={minPlaytimeHours}
+              onChange={(e) => setMinPlaytimeHours(e.target.value)}
+              placeholder="0"
+              className="w-32"
+            />
+          </div>
+        </div>
+      )}
 
       {isLoading && <Skeleton className="h-48 w-full" />}
 

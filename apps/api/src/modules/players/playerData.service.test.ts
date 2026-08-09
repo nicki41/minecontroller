@@ -150,6 +150,18 @@ describe("PlayerDataService (filesystem I/O)", () => {
       const stats = await service.readStats(makeServer(), "nonexistent-uuid");
       expect(stats).toBeNull();
     });
+
+    it("falls back to Paper's world/players/stats layout when the vanilla flat layout has no file (confirmed against a real Paper server)", async () => {
+      const uuid = "paper-uuid";
+      await fs.mkdir(path.join(tmpDataPath, "server1", "world", "players", "stats"), { recursive: true });
+      await fs.writeFile(
+        path.join(tmpDataPath, "server1", "world", "players", "stats", `${uuid}.json`),
+        JSON.stringify({ stats: { "minecraft:custom": { "minecraft:play_time": 400 } } }),
+      );
+      const service = new PlayerDataService(makeFakePrisma());
+      const stats = await service.readStats(makeServer(), uuid);
+      expect(stats?.playtimeSeconds).toBe(20);
+    });
   });
 
   describe("readGamemode", () => {
@@ -168,6 +180,18 @@ describe("PlayerDataService (filesystem I/O)", () => {
       const service = new PlayerDataService(makeFakePrisma());
       const result = await service.readGamemode(makeServer(), "nonexistent-uuid");
       expect(result.gamemode).toBeNull();
+    });
+
+    it("falls back to Paper's world/players/data layout when the vanilla flat layout has no file", async () => {
+      const uuid = "paper-uuid-2";
+      const tag = nbt.comp({ playerGameType: nbt.int(3) }, ""); // 3 = Spectator
+      const buffer = nbt.writeUncompressed(tag as unknown as nbt.NBT);
+      await fs.mkdir(path.join(tmpDataPath, "server1", "world", "players", "data"), { recursive: true });
+      await fs.writeFile(path.join(tmpDataPath, "server1", "world", "players", "data", `${uuid}.dat`), buffer);
+
+      const service = new PlayerDataService(makeFakePrisma());
+      const result = await service.readGamemode(makeServer(), uuid);
+      expect(result.gamemode).toBe("SPECTATOR");
     });
   });
 
