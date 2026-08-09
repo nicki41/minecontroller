@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Info, Search, UserPlus, Users } from "lucide-react";
+import { Info, Search, Users } from "lucide-react";
 import type { PlayerDto } from "@minecraftpanel/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/layout/EmptyState";
 import { useAuth } from "@/lib/auth";
@@ -20,6 +19,7 @@ import {
   useUnbanPlayer,
   useMessagePlayer,
 } from "@/lib/players";
+import { useIpBan, useIpUnban, useSetGamemode, useTempBan, useWipe } from "@/lib/playerDetails";
 import { PlayerCard } from "@/components/players/PlayerCard";
 import { PlayerDetailModal } from "@/components/players/PlayerDetailModal";
 import type { PlayerActionHandlers } from "@/components/players/playerActions";
@@ -42,8 +42,6 @@ export default function ServerPlayersPage() {
   const { data, isLoading } = usePlayers(server.id);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
-  const [addOpen, setAddOpen] = useState(false);
-  const [addName, setAddName] = useState("");
   const [selected, setSelected] = useState<{ username: string; compose: boolean } | null>(null);
 
   const isRunning = server.status === "RUNNING";
@@ -53,6 +51,7 @@ export default function ServerPlayersPage() {
   const canKick = hasFullAccess && hasPermission("players.kick");
   const canBan = hasFullAccess && hasPermission("players.ban");
   const canMessage = hasFullAccess && hasPermission("players.message");
+  const canWipe = hasFullAccess && hasPermission("players.wipe");
 
   const op = useOpPlayer(server.id);
   const deop = useDeopPlayer(server.id);
@@ -62,21 +61,19 @@ export default function ServerPlayersPage() {
   const ban = useBanPlayer(server.id);
   const unban = useUnbanPlayer(server.id);
   const message = useMessagePlayer(server.id);
+  const tempBan = useTempBan(server.id);
+  const ipBan = useIpBan(server.id);
+  const ipUnban = useIpUnban(server.id);
+  const wipe = useWipe(server.id);
+  const setGamemode = useSetGamemode(server.id);
 
-  async function run(action: { mutateAsync: (v: { username: string }) => Promise<unknown> }, username: string, label: string) {
+  async function run<TVars extends { username: string }>(action: { mutateAsync: (v: TVars) => Promise<unknown> }, vars: TVars, label: string) {
     try {
-      await action.mutateAsync({ username });
-      toast.success(`${label} ${username}.`);
+      await action.mutateAsync(vars);
+      toast.success(`${label} ${vars.username}.`);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : `Failed to ${label.toLowerCase()} ${username}.`);
+      toast.error(err instanceof ApiError ? err.message : `Failed to ${label.toLowerCase()} ${vars.username}.`);
     }
-  }
-
-  async function handleAddToWhitelist() {
-    if (!addName.trim()) return;
-    await run(whitelistAdd, addName.trim(), "Whitelisted");
-    setAddOpen(false);
-    setAddName("");
   }
 
   async function handleSendMessage(username: string, text: string) {
@@ -94,15 +91,21 @@ export default function ServerPlayersPage() {
     canWhitelist,
     canOp,
     canMessage,
-    onKick: (username) => void run(kick, username, "Kicked"),
-    onBan: (username) => void run(ban, username, "Banned"),
-    onUnban: (username) => void run(unban, username, "Unbanned"),
-    onWhitelistAdd: (username) => void run(whitelistAdd, username, "Whitelisted"),
-    onWhitelistRemove: (username) => void run(whitelistRemove, username, "Removed from whitelist"),
-    onOp: (username) => void run(op, username, "Opped"),
-    onDeop: (username) => void run(deop, username, "De-opped"),
+    canWipe,
+    onKick: (username, reason) => void run(kick, { username, reason }, "Kicked"),
+    onBan: (username, reason) => void run(ban, { username, reason }, "Banned"),
+    onUnban: (username) => void run(unban, { username }, "Unbanned"),
+    onWhitelistAdd: (username) => void run(whitelistAdd, { username }, "Whitelisted"),
+    onWhitelistRemove: (username) => void run(whitelistRemove, { username }, "Removed from whitelist"),
+    onOp: (username) => void run(op, { username }, "Opped"),
+    onDeop: (username) => void run(deop, { username }, "De-opped"),
     onOpenDetail: (username) => setSelected({ username, compose: false }),
     onOpenMessage: (username) => setSelected({ username, compose: true }),
+    onTempBan: (username, durationMinutes, reason) => void run(tempBan, { username, durationMinutes, reason }, "Temporarily banned"),
+    onIpBan: (username, ip, reason) => void run(ipBan, { username, ip, reason }, "Banned IP for"),
+    onIpUnban: (username, ip) => void run(ipUnban, { username, ip }, "Removed IP ban for"),
+    onWipe: (username) => void run(wipe, { username }, "Wiped data for"),
+    onSetGamemode: (username, mode) => void run(setGamemode, { username, mode }, "Changed gamemode for"),
   };
 
   const players = data?.players ?? [];
@@ -169,11 +172,6 @@ export default function ServerPlayersPage() {
             </Button>
           ))}
         </div>
-        {canWhitelist && (
-          <Button size="sm" variant="outline" onClick={() => setAddOpen(true)} disabled={!isRunning}>
-            <UserPlus className="h-3.5 w-3.5" /> Add to whitelist
-          </Button>
-        )}
       </div>
 
       {isLoading && <Skeleton className="h-48 w-full" />}
@@ -197,6 +195,7 @@ export default function ServerPlayersPage() {
       {selected && (
         <PlayerDetailModal
           player={selectedPlayer}
+          serverId={server.id}
           actions={actions}
           initialCompose={selected.compose}
           onClose={() => setSelected(null)}
@@ -204,23 +203,6 @@ export default function ServerPlayersPage() {
           sending={message.isPending}
         />
       )}
-
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add to whitelist</DialogTitle>
-          </DialogHeader>
-          <Input value={addName} onChange={(e) => setAddName(e.target.value)} placeholder="Minecraft username" autoFocus />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => void handleAddToWhitelist()} disabled={!addName.trim() || whitelistAdd.isPending}>
-              Add
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

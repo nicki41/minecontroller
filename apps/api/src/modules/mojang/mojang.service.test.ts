@@ -79,6 +79,20 @@ describe("MojangService", () => {
       expect(fetchMock).toHaveBeenNthCalledWith(2, expect.any(URL), expect.anything());
     });
 
+    it("upgrades Mojang's plain http:// texture URL to https:// before fetching (Mojang's own API reports http://)", async () => {
+      fetchMock
+        .mockResolvedValueOnce({ ok: true, json: async () => texturesPayload("http://textures.minecraft.net/texture/abc", null) })
+        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new Uint8Array([9]).buffer });
+
+      const service = new MojangService();
+      const bytes = await service.getSkinBytes("some-uuid");
+
+      expect(Buffer.from(bytes)).toEqual(Buffer.from([9]));
+      const fetchedUrl = fetchMock.mock.calls[1]![0] as URL;
+      expect(fetchedUrl.protocol).toBe("https:");
+      expect(fetchedUrl.hostname).toBe("textures.minecraft.net");
+    });
+
     it("throws NotFoundError when the player has no skin on record", async () => {
       fetchMock.mockResolvedValueOnce({ ok: true, json: async () => texturesPayload(null, null) });
 

@@ -24,6 +24,7 @@ export const PERMISSIONS = [
   "players.op",
   "players.whitelist",
   "players.message",
+  "players.wipe",
 
   "plugins.view",
   "plugins.install",

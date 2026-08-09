@@ -19,3 +19,9 @@ export function formatJoinDate(isoDate: string | null): string {
   if (!isoDate) return "Unknown";
   return format(new Date(isoDate), "MMM d, yyyy");
 }
+
+/** Date + time — used where minute-level precision matters (tempban expiry can be as short as 10 minutes, so a date-only label would be ambiguous/useless). */
+export function formatDateTime(isoDate: string | null): string {
+  if (!isoDate) return "Unknown";
+  return format(new Date(isoDate), "MMM d, yyyy HH:mm");
+}

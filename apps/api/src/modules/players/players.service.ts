@@ -6,6 +6,12 @@ import { env } from "../../config/env.js";
 import { safeResolve } from "../../lib/safePath.js";
 import { BadRequestError, ConflictError } from "../../lib/errors.js";
 import { MinecraftServerManager } from "../../minecraft/MinecraftServerManager.js";
+import { resolveUuid, resolveWorldRoot } from "./playerData.service.js";
+import { logger } from "../../lib/logger.js";
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 const VALID_USERNAME = /^[A-Za-z0-9_]{1,16}$/;
 
@@ -16,13 +22,13 @@ const VALID_USERNAME = /^[A-Za-z0-9_]{1,16}$/;
  * or smuggling an extra one — validated the same way any user input feeding
  * a command interpreter should be, per spec's command-injection guidance.
  */
-function assertValidUsername(username: string): void {
+export function assertValidUsername(username: string): void {
   if (!VALID_USERNAME.test(username)) {
     throw new BadRequestError("Invalid Minecraft username.");
   }
 }
 
-function sanitizeReason(reason: string | undefined): string | undefined {
+export function sanitizeReason(reason: string | undefined): string | undefined {
   if (!reason) return undefined;
   const cleaned = reason.replace(/[\r\n]+/g, " ").trim();
   return cleaned || undefined;
@@ -199,10 +205,51 @@ export class PlayerService {
     await this.manager.sendCommand(server.id, `pardon ${username}`);
   }
 
+  /** Vanilla's /gamemode command requires the target to be online — same as kick, the UI disables the action while offline rather than this throwing (RCON just replies "No player was found" harmlessly). */
+  async setGamemode(server: Server, username: string, mode: "SURVIVAL" | "CREATIVE" | "ADVENTURE" | "SPECTATOR"): Promise<void> {
+    assertValidUsername(username);
+    await this.requireRunning(server);
+    await this.manager.sendCommand(server.id, `gamemode ${mode.toLowerCase()} ${username}`);
+  }
+
   async message(server: Server, username: string, text: string): Promise<void> {
     assertValidUsername(username);
     await this.requireRunning(server);
     const cleanText = sanitizeMessage(text);
     await this.manager.sendCommand(server.id, `tell ${username} ${cleanText}`);
+  }
+
+  /**
+   * Deletes a player's stats + playerdata files so they start completely
+   * fresh on next join — irreversible, gated behind its own `players.wipe`
+   * permission rather than reusing `players.ban`. If they're currently
+   * online, kicks them first and gives the server a moment to finish
+   * writing/closing their files before deleting, so a natural disconnect
+   * later can't resurrect the files we just removed. Works even while the
+   * server is stopped (pure filesystem op) — only the kick step needs it running.
+   */
+  async wipe(server: Server, username: string): Promise<void> {
+    assertValidUsername(username);
+    const uuid = await resolveUuid(this.prisma, server, username);
+    if (!uuid) throw new BadRequestError("No known UUID for this player — nothing to wipe.");
+
+    if (server.status === "RUNNING") {
+      const online = (await this.getOnlinePlayerNames(server)).some((n) => n.toLowerCase() === username.toLowerCase());
+      if (online) {
+        await this.manager.sendCommand(server.id, `kick ${username} Your data is being reset by an administrator.`);
+        await sleep(1000);
+      }
+    }
+
+    const worldRoot = await resolveWorldRoot(server);
+    const targets = [`stats/${uuid}.json`, `playerdata/${uuid}.dat`, `playerdata/${uuid}.dat_old`];
+    for (const relPath of targets) {
+      try {
+        const filePath = await safeResolve(worldRoot, relPath);
+        await fs.rm(filePath, { force: true });
+      } catch (err) {
+        logger.debug({ err, serverId: server.id, uuid, relPath }, "Failed to remove file during player wipe");
+      }
+    }
   }
 }

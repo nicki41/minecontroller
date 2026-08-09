@@ -66,7 +66,8 @@ export function PlayerCard({ player: p, actions }: PlayerCardProps) {
             title={`Kick ${p.username}?`}
             description="They'll be disconnected immediately and can rejoin right away."
             confirmLabel="Kick"
-            onConfirm={() => actions.onKick(p.username)}
+            showReason
+            onConfirm={(reason) => actions.onKick(p.username, reason)}
           />
         )}
         {actions.canBan &&
@@ -93,7 +94,8 @@ export function PlayerCard({ player: p, actions }: PlayerCardProps) {
               description="They'll be disconnected and unable to rejoin until unbanned."
               confirmLabel="Ban"
               destructive
-              onConfirm={() => actions.onBan(p.username)}
+              showReason
+              onConfirm={(reason) => actions.onBan(p.username, reason)}
             />
           ))}
         {actions.canWhitelist &&

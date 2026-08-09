@@ -39,6 +39,7 @@
     "fastify-plugin": "^5.0.1",
     "mime-types": "^2.1.35",
     "otpauth": "^9.5.1",
+    "prismarine-nbt": "^2.7.0",
     "qrcode": "^1.5.4",
     "tar": "^7.4.3",
     "yaml": "^2.9.0",

@@ -30,9 +30,13 @@ function assertTrustedUrl(rawUrl: string): URL {
   } catch {
     throw new NotFoundError("Mojang returned an invalid texture URL.");
   }
-  if (parsed.protocol !== "https:" || !ALLOWED_HOSTS.has(parsed.hostname)) {
+  if ((parsed.protocol !== "https:" && parsed.protocol !== "http:") || !ALLOWED_HOSTS.has(parsed.hostname)) {
     throw new NotFoundError("Refusing to fetch from an untrusted host.");
   }
+  // Mojang's session-profile API reports texture URLs as plain http:// even
+  // though textures.minecraft.net also serves https — always upgrade before
+  // the actual outbound fetch rather than trusting Mojang's stated scheme.
+  parsed.protocol = "https:";
   return parsed;
 }
 

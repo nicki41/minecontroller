@@ -3,6 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { ServerStatus } from "@minecraftpanel/shared";
 import { logger } from "../lib/logger.js";
 import { stripAnsi } from "../lib/ansi.js";
+import { expireDueBans } from "../modules/players/playerBans.service.js";
 
 const RECONCILE_MS = 60_000;
 const STREAM_RETRY_MS = 5000;
@@ -187,8 +188,15 @@ export class PlayerActivityTracker {
     }
   }
 
+  /** A UUID we already know under a different username reappearing means a rename — logged as history, not merged (see PlayerNameHistory's schema comment for why). */
   private async recordUuid(serverId: string, username: string, uuid: string): Promise<void> {
     const usernameLower = username.toLowerCase();
+    const priorByUuid = await this.prisma.playerProfile.findFirst({
+      where: { serverId, uuid, usernameLower: { not: usernameLower } },
+    });
+    if (priorByUuid) {
+      await this.prisma.playerNameHistory.create({ data: { serverId, uuid, username } });
+    }
     await this.prisma.playerProfile.upsert({
       where: { serverId_usernameLower: { serverId, usernameLower } },
       create: { serverId, usernameLower, username, uuid },
@@ -203,6 +211,27 @@ export class PlayerActivityTracker {
       create: { serverId, usernameLower, username, lastIp: ip },
       update: { username, lastIp: ip },
     });
+    const lastEntry = await this.prisma.playerIpHistory.findFirst({
+      where: { serverId, usernameLower },
+      orderBy: { seenAt: "desc" },
+    });
+    if (lastEntry?.ip !== ip) {
+      await this.prisma.playerIpHistory.create({ data: { serverId, usernameLower, ip } });
+    }
+  }
+
+  private async openSession(serverId: string, usernameLower: string, startedAt: Date): Promise<void> {
+    await this.prisma.playerSession.create({ data: { serverId, usernameLower, startedAt } });
+  }
+
+  private async closeOpenSession(serverId: string, usernameLower: string, endedAt: Date): Promise<void> {
+    const session = await this.prisma.playerSession.findFirst({
+      where: { serverId, usernameLower, endedAt: null },
+      orderBy: { startedAt: "desc" },
+    });
+    if (!session) return;
+    const durationSeconds = Math.max(0, Math.round((endedAt.getTime() - session.startedAt.getTime()) / 1000));
+    await this.prisma.playerSession.update({ where: { id: session.id }, data: { endedAt, durationSeconds } });
   }
 
   private async recordJoin(serverId: string, username: string): Promise<void> {
@@ -214,6 +243,7 @@ export class PlayerActivityTracker {
       create: { serverId, usernameLower, username, firstSeenAt: now, lastSeenAt: now, currentSessionStartedAt: now },
       update: { username, lastSeenAt: now, currentSessionStartedAt: now, firstSeenAt: existing?.firstSeenAt ?? now },
     });
+    await this.openSession(serverId, usernameLower, now);
   }
 
   private async recordLeave(serverId: string, username: string): Promise<void> {
@@ -234,6 +264,7 @@ export class PlayerActivityTracker {
       where: { serverId_usernameLower: { serverId, usernameLower } },
       data: { lastSeenAt: now, currentSessionStartedAt: null, totalPlaytimeSeconds: existing.totalPlaytimeSeconds + deltaSeconds },
     });
+    await this.closeOpenSession(serverId, usernameLower, now);
   }
 
   private async reconcileAll(): Promise<void> {
@@ -242,8 +273,10 @@ export class PlayerActivityTracker {
     }
   }
 
-  /** RCON `list` is ground truth: closes sessions a dropped log line missed (kick/crash), and seeds sessions for players already online when tracking (re)starts. */
+  /** RCON `list` is ground truth: closes sessions a dropped log line missed (kick/crash), and seeds sessions for players already online when tracking (re)starts. Also where due tempbans get auto-pardoned, piggybacking on this already-scheduled per-server tick. */
   private async reconcileServer(serverId: string): Promise<void> {
+    await expireDueBans(this.prisma, this.manager, serverId).catch((err) => logger.debug({ err, serverId }, "expireDueBans failed"));
+
     let onlineNames: string[];
     try {
       const response = await this.manager.sendCommand(serverId, "list");
@@ -264,6 +297,7 @@ export class PlayerActivityTracker {
         where: { id: profile.id },
         data: { lastSeenAt: now, currentSessionStartedAt: null, totalPlaytimeSeconds: profile.totalPlaytimeSeconds + deltaSeconds },
       });
+      await this.closeOpenSession(serverId, profile.usernameLower, now);
     }
 
     const trackedLower = new Set(openSessions.map((p) => p.usernameLower));
@@ -274,6 +308,7 @@ export class PlayerActivityTracker {
         create: { serverId, usernameLower, username, firstSeenAt: now, lastSeenAt: now, currentSessionStartedAt: now },
         update: { username, lastSeenAt: now, currentSessionStartedAt: now },
       });
+      await this.openSession(serverId, usernameLower, now);
     }
   }
 
@@ -286,6 +321,7 @@ export class PlayerActivityTracker {
         where: { id: profile.id },
         data: { lastSeenAt: now, currentSessionStartedAt: null, totalPlaytimeSeconds: profile.totalPlaytimeSeconds + deltaSeconds },
       });
+      await this.closeOpenSession(serverId, profile.usernameLower, now);
     }
   }
 }

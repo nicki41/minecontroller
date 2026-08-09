@@ -78,7 +78,7 @@ describe("effectiveServerPermissions", () => {
 describe("SYSTEM_ROLE_PERMISSIONS", () => {
   it("keeps Viewer strictly read-only (no create/delete/execute/install/restore permissions)", () => {
     const mutating = SYSTEM_ROLE_PERMISSIONS.Viewer.filter((p) =>
-      /\.(create|delete|start|stop|restart|execute|edit|upload|install|remove|kick|ban|op|whitelist|message|restore)$|settings\.edit$/.test(
+      /\.(create|delete|start|stop|restart|execute|edit|upload|install|remove|kick|ban|op|whitelist|message|wipe|restore)$|settings\.edit$/.test(
         p,
       ),
     );
@@ -89,6 +89,15 @@ describe("SYSTEM_ROLE_PERMISSIONS", () => {
     const result = effectiveServerPermissions(["players.view", "players.message"], "VIEW_ONLY");
     expect(result.has("players.view")).toBe(true);
     expect(result.has("players.message")).toBe(false);
+  });
+
+  it("keeps players.wipe out of Manager and Moderator by default (destructive, conservative default)", () => {
+    expect(SYSTEM_ROLE_PERMISSIONS.Manager).not.toContain("players.wipe");
+    expect(SYSTEM_ROLE_PERMISSIONS.Moderator).not.toContain("players.wipe");
+  });
+
+  it("grants players.wipe to Admin automatically (filter-based, not an explicit array)", () => {
+    expect(SYSTEM_ROLE_PERMISSIONS.Admin).toContain("players.wipe");
   });
 
   it("never grants Manager user/role administration permissions", () => {

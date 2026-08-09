@@ -27,12 +27,14 @@ model User {
   /// False while a secret has been provisioned but not yet confirmed with a valid code — see AuthService.enableTotp.
   totpEnabled          Boolean @default(false)
 
-  roles         UserRole[]
-  serverAccess  ServerAccess[]
-  sessions      Session[]
-  auditLogs     AuditLog[]
-  backups       Backup[]
-  recoveryCodes RecoveryCode[]
+  roles              UserRole[]
+  serverAccess       ServerAccess[]
+  sessions           Session[]
+  auditLogs          AuditLog[]
+  backups            Backup[]
+  recoveryCodes      RecoveryCode[]
+  playerBansCreated  PlayerBan[]    @relation("PlayerBanCreatedBy")
+  playerBansRevoked  PlayerBan[]    @relation("PlayerBanRevokedBy")
 
   @@index([email])
 }
@@ -179,11 +181,15 @@ model Server {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  access         ServerAccess[]
-  auditLogs      AuditLog[]
-  backups        Backup[]
-  pluginInstalls PluginInstall[]
-  playerProfiles PlayerProfile[]
+  access           ServerAccess[]
+  auditLogs        AuditLog[]
+  backups          Backup[]
+  pluginInstalls   PluginInstall[]
+  playerProfiles   PlayerProfile[]
+  playerSessions   PlayerSession[]
+  playerNameHistory PlayerNameHistory[]
+  playerIpHistory  PlayerIpHistory[]
+  playerBans       PlayerBan[]
 
   @@index([status])
 }
@@ -217,6 +223,88 @@ model PlayerProfile {
 
   @@unique([serverId, usernameLower])
   @@index([serverId])
+}
+
+/// One row per join→leave, written by PlayerActivityTracker alongside its
+/// PlayerProfile updates. Exists separately from PlayerProfile's running
+/// totalPlaytimeSeconds because it's the only way to answer "how many
+/// sessions", "average/longest session", and "playtime per day" without
+/// re-deriving them from raw log lines every time.
+model PlayerSession {
+  id              String    @id @default(cuid())
+  serverId        String
+  usernameLower   String
+  startedAt       DateTime
+  endedAt         DateTime?
+  durationSeconds Int?
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId, usernameLower])
+  @@index([serverId, startedAt])
+}
+
+/// A UUID reappearing under a different username than PlayerProfile already
+/// has on record for it — written by PlayerActivityTracker.recordUuid.
+/// Deliberately just a log of the rename event, not an identity merge: the
+/// old username's PlayerProfile/PlayerSession rows are left exactly as they
+/// were (see the schema-design note in the Players feature's plan/PR).
+model PlayerNameHistory {
+  id        String   @id @default(cuid())
+  serverId  String
+  uuid      String
+  username  String
+  changedAt DateTime @default(now())
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId, uuid])
+}
+
+/// Every *new* IP a player has connected from (only inserted when it differs
+/// from the most recent entry for that player — a reconnect from the same
+/// address doesn't spam a new row).
+model PlayerIpHistory {
+  id            String   @id @default(cuid())
+  serverId      String
+  usernameLower String
+  ip            String
+  seenAt        DateTime @default(now())
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId, usernameLower])
+}
+
+/// One row per ban action (permanent name ban, temp name ban, or IP ban),
+/// covering ban history and "is this currently active" (revokedAt null vs
+/// set) in one place — PlayerService/PlayerBanService write here in
+/// addition to the RCON command that actually enforces the ban.
+model PlayerBan {
+  id            String   @id @default(cuid())
+  serverId      String
+  usernameLower String
+  username      String
+  /// "NAME" | "IP" — see the note on ServerAccess.level for why this is a plain String.
+  type          String
+  /// The username (NAME) or IP address (IP) actually passed to the RCON ban command.
+  target        String
+  reason        String?
+  createdById   String?
+  createdAt     DateTime  @default(now())
+  /// Non-null for a tempban — PlayerActivityTracker's periodic reconcile auto-pardons and revokes once this passes.
+  expiresAt     DateTime?
+  revokedAt     DateTime?
+  /// Null when revokedAt was set automatically by the tempban-expiry check rather than an admin action.
+  revokedById   String?
+  revokedReason String?
+
+  server    Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation("PlayerBanCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  revokedBy User?  @relation("PlayerBanRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  @@index([serverId, usernameLower])
+  @@index([expiresAt])
 }
 
 // ------------------------------------------------------------------
