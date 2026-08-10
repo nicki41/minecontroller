@@ -53,11 +53,19 @@ export function PlayerModerationTab({ player: p, serverId, actions, initialCompo
   const [showCompose, setShowCompose] = useState(initialCompose);
   const [messageText, setMessageText] = useState("");
   const [showIps, setShowIps] = useState(false);
-  const [showCurrentIp, setShowCurrentIp] = useState(false);
   const { copiedField, copy } = useCopyField();
   const { data: bansData, isLoading: bansLoading } = usePlayerBans(serverId, p.username);
   const { data: nameHistoryData } = usePlayerNameHistory(serverId, p.username);
   const { data: ipHistoryData } = usePlayerIpHistory(serverId, p.username);
+
+  // The current IP is always recorded into IP history too (see
+  // PlayerActivityTracker.recordIp), so it normally already leads the list —
+  // this fallback only kicks in for profiles whose lastIp predates history
+  // tracking, so "current IP" never silently disappears from the list.
+  const ipEntries: { ip: string; seenAt: string | null }[] =
+    p.lastIp && ipHistoryData?.history[0]?.ip !== p.lastIp
+      ? [{ ip: p.lastIp, seenAt: null }, ...(ipHistoryData?.history ?? [])]
+      : (ipHistoryData?.history ?? []);
 
   async function handleSend() {
     if (!messageText.trim()) return;
@@ -68,27 +76,6 @@ export function PlayerModerationTab({ player: p, serverId, actions, initialCompo
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg bg-muted/40 px-3 py-2.5">
-        <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">IP address</div>
-        <div className="mt-0.5 flex items-center justify-between gap-2">
-          <span className="font-mono text-sm font-medium">{!p.lastIp ? "Unknown" : showCurrentIp ? p.lastIp : "•••.•••.•••.•••"}</span>
-          {p.lastIp && (
-            <div className="flex shrink-0 items-center gap-1.5">
-              <button
-                onClick={() => setShowCurrentIp((v) => !v)}
-                className="text-muted-foreground hover:text-foreground"
-                title={showCurrentIp ? "Hide IP" : "Show IP"}
-              >
-                {showCurrentIp ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-              </button>
-              <button onClick={() => copy("current-ip", p.lastIp!)} className="text-muted-foreground hover:text-foreground" title="Copy IP">
-                {copiedField === "current-ip" ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
       <div>
         <div className="mb-2 text-sm font-medium">Quick actions</div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -247,7 +234,7 @@ export function PlayerModerationTab({ player: p, serverId, actions, initialCompo
         <div>
           <div className="mb-2 flex items-center justify-between">
             <div className="text-sm font-medium">IP history</div>
-            {!!ipHistoryData?.history.length && (
+            {!!ipEntries.length && (
               <button
                 onClick={() => setShowIps((v) => !v)}
                 className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
@@ -258,14 +245,26 @@ export function PlayerModerationTab({ player: p, serverId, actions, initialCompo
               </button>
             )}
           </div>
-          {!ipHistoryData?.history.length ? (
+          {!ipEntries.length ? (
             <div className="text-sm text-muted-foreground">No IPs on record.</div>
           ) : (
             <ul className="space-y-1.5 text-sm">
-              {ipHistoryData.history.map((entry, i) => (
-                <li key={i} className="flex items-center justify-between rounded-md bg-muted/40 px-2.5 py-1.5">
-                  <span className="font-mono">{showIps ? entry.ip : "•••.•••.•••.•••"}</span>
-                  <span className="text-xs text-muted-foreground">{formatJoinDate(entry.seenAt)}</span>
+              {ipEntries.map((entry, i) => (
+                <li key={i} className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-2.5 py-1.5">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate font-mono">{showIps ? entry.ip : "•••.•••.•••.•••"}</span>
+                    {i === 0 && (
+                      <Badge variant="outline" className="border-transparent bg-primary/15 text-primary">
+                        Latest
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="text-xs text-muted-foreground">{entry.seenAt ? formatJoinDate(entry.seenAt) : "current"}</span>
+                    <button onClick={() => copy(`ip-${i}`, entry.ip)} className="text-muted-foreground hover:text-foreground" title="Copy IP">
+                      {copiedField === `ip-${i}` ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
