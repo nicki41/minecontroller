@@ -1,18 +1,17 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingLogo } from "./LoadingLogo";
+import { useTrickleProgress } from "./useTrickleProgress";
 
 export function RequireAuth() {
   const { user, isLoading, setupRequired } = useAuth();
   const location = useLocation();
+  const { progress, visible } = useTrickleProgress(isLoading);
 
-  if (isLoading) {
+  if (visible) {
     return (
       <div className="flex h-dvh w-full items-center justify-center bg-background">
-        <div className="w-64 space-y-3">
-          <Skeleton className="h-4 w-3/4" />
-          <Skeleton className="h-4 w-1/2" />
-        </div>
+        <LoadingLogo progress={progress} />
       </div>
     );
   }

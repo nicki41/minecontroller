@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/lib/auth";
 import { AppShell } from "@/components/layout/AppShell";
+import { AppLoadingOverlay } from "@/components/layout/AppLoadingOverlay";
 import { RequireAuth, RedirectIfAuthed, RedirectIfSetupDone } from "@/components/layout/RequireAuth";
 import SetupPage from "@/routes/SetupPage";
 import LoginPage from "@/routes/LoginPage";
@@ -25,6 +26,7 @@ import NotFound from "@/routes/NotFound";
 export default function App() {
   return (
     <AuthProvider>
+      <AppLoadingOverlay />
       <Routes>
         <Route
           path="/setup"
