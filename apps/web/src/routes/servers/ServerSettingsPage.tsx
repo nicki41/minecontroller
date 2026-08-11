@@ -1,12 +1,12 @@
 import { getServerConfigSchema } from "@minecraftpanel/shared";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BackupsCard } from "@/components/servers/BackupsCard";
 import { useAuth } from "@/lib/auth";
 import { useServerOutletContext } from "./useServerOutletContext";
 import { GeneralSettingsTab } from "./settings/GeneralSettingsTab";
 import { ServerPropertiesTab } from "./settings/ServerPropertiesTab";
 import { ResourcesSettingsTab } from "./settings/ResourcesSettingsTab";
 import { ServerTypeConfigTab } from "./settings/ServerTypeConfigTab";
+import { DangerZoneCard } from "./settings/DangerZoneCard";
 
 export default function ServerSettingsPage() {
   const { server } = useServerOutletContext();
@@ -21,11 +21,11 @@ export default function ServerSettingsPage() {
         <TabsTrigger value="properties">Server Properties</TabsTrigger>
         {typeConfigSchema && <TabsTrigger value="type-config">{typeConfigSchema.tabLabel}</TabsTrigger>}
         <TabsTrigger value="resources">Resources</TabsTrigger>
-        <TabsTrigger value="backups">Backups</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="general">
+      <TabsContent value="general" className="space-y-6">
         <GeneralSettingsTab server={server} canEdit={canEdit} />
+        <DangerZoneCard server={server} />
       </TabsContent>
       <TabsContent value="properties">
         <ServerPropertiesTab server={server} canEdit={canEdit} />
@@ -37,9 +37,6 @@ export default function ServerSettingsPage() {
       )}
       <TabsContent value="resources">
         <ResourcesSettingsTab server={server} canEdit={canEdit} />
-      </TabsContent>
-      <TabsContent value="backups">
-        <BackupsCard server={server} />
       </TabsContent>
     </Tabs>
   );

@@ -15,6 +15,7 @@ import {
   Blocks,
   UsersRound,
   SlidersHorizontal,
+  Archive,
 } from "lucide-react";
 import type { Permission } from "@minecraftpanel/shared";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,7 @@ const SERVER_NAV_ITEMS = [
   { to: "files", label: "Files", icon: FolderOpen },
   { to: "plugins", label: "Plugins/Mods", icon: Blocks },
   { to: "players", label: "Players", icon: UsersRound },
+  { to: "backups", label: "Backups", icon: Archive },
   { to: "settings", label: "Settings", icon: SlidersHorizontal },
 ];
 

@@ -1,23 +1,12 @@
-import { Outlet, useNavigate, useParams } from "react-router-dom";
+import { Outlet, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Play, Square, RotateCw, Trash2, Box, Radio, Clock, Users } from "lucide-react";
+import { Play, Square, RotateCw, Box, Radio, Clock, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { StatusLabel } from "@/components/servers/StatusBadge";
 import { SOFTWARE_META } from "@/lib/softwareMeta";
-import { useDeleteServer, useServer, useServerAction, useServerStats } from "@/lib/servers";
+import { useServer, useServerAction, useServerStats } from "@/lib/servers";
 import { useServerConfigFile } from "@/lib/serverConfig";
 import { usePlayers } from "@/lib/players";
 import { usePublicIp } from "@/lib/system";
@@ -28,7 +17,6 @@ import { ServerLiveProvider } from "./ServerLiveContext";
 
 export default function ServerDetailLayout() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const { hasPermission } = useAuth();
   const { data, isLoading } = useServer(id);
   const server = data?.server;
@@ -36,7 +24,6 @@ export default function ServerDetailLayout() {
   const start = useServerAction(id!, "start");
   const stop = useServerAction(id!, "stop");
   const restart = useServerAction(id!, "restart");
-  const del = useDeleteServer();
 
   const isRunning = server?.status === "RUNNING";
   const stats = useServerStats(id, isRunning);
@@ -56,17 +43,6 @@ export default function ServerDetailLayout() {
     }
   }
 
-  async function handleDelete(keepFiles: boolean) {
-    if (!id) return;
-    try {
-      await del.mutateAsync({ id, keepFiles });
-      toast.success("Server deleted.");
-      navigate("/servers");
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to delete server.");
-    }
-  }
-
   if (isLoading || !server) {
     return (
       <div className="space-y-4">
@@ -80,6 +56,9 @@ export default function ServerDetailLayout() {
   const canStart = (server.status === "STOPPED" || server.status === "ERROR") && hasPermission("servers.start");
   const canStop = server.status === "RUNNING" && hasPermission("servers.stop");
   const canRestart = server.status === "RUNNING" && hasPermission("servers.restart");
+  // Once Start has been pressed, the toggle flips to Stop immediately (disabled
+  // until the server actually reaches RUNNING) rather than snapping back to Start.
+  const showStop = server.status === "STARTING" || server.status === "RUNNING" || server.status === "STOPPING";
 
   return (
     <div className="space-y-6">
@@ -110,42 +89,18 @@ export default function ServerDetailLayout() {
 
         {canFull && (
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="success" disabled={!canStart || busy} onClick={() => run(start, "start")}>
-              <Play /> Start
-            </Button>
-            <Button size="sm" variant="stop" disabled={!canStop || busy} onClick={() => run(stop, "stop")}>
-              <Square /> Stop
-            </Button>
+            {showStop ? (
+              <Button size="sm" variant="stop" disabled={!canStop || busy} onClick={() => run(stop, "stop")}>
+                <Square /> Stop
+              </Button>
+            ) : (
+              <Button size="sm" variant="success" disabled={!canStart || busy} onClick={() => run(start, "start")}>
+                <Play /> Start
+              </Button>
+            )}
             <Button size="sm" variant="warning" disabled={!canRestart || busy} onClick={() => run(restart, "restart")}>
               <RotateCw /> Restart
             </Button>
-            {hasPermission("servers.delete") && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button size="sm" variant="destructive">
-                    <Trash2 /> Delete
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete server?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This will permanently delete the Docker container, server files, configuration and installed
-                      plugins/mods for <strong>{server.name}</strong>. This cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <Button variant="outline" onClick={() => handleDelete(true)}>
-                      Delete, keep files
-                    </Button>
-                    <AlertDialogAction variant="destructive" onClick={() => handleDelete(false)}>
-                      Delete permanently
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
           </div>
         )}
       </div>
