@@ -21,7 +21,28 @@ const MAX_QUEUE_DEPTH = 20;
 // forget from every real caller today — nothing reads its return value — so
 // it only needs the generic quiet-window capture below, not its own regex.
 const LIST_COMMAND = /^list\b/i;
-const LIST_RESPONSE = /^There are \d+ of a max of \d+ players online/i;
+// No leading ^ anchor: a real console line is always prefixed with a
+// timestamp + logger tag (e.g. "[12:34:56] [Server thread/INFO]: "), so an
+// anchored match against the raw line can never fire — confirmed against a
+// real server's actual output (not just this file's own unit tests, which
+// is exactly how this slipped through the first time).
+const LIST_RESPONSE = /There are \d+ of a max of \d+ players online/i;
+
+// That same prefix must be stripped from the text handed back to the
+// caller, too: PlayerActivityTracker.parseOnlineNames() and
+// PlayerService.getOnlinePlayerNames() both split on the *first* colon in
+// the response (":\s*(.+)$"), written against RCON's reply text, which
+// never carried this prefix — left in place, they'd split inside the
+// timestamp itself ("[12" / "34:56]...") instead of after "online:".
+// MetricsHistoryCollector.parsePlayerCount()'s unanchored regex happens to
+// be immune, but stripping here restores the exact clean-text contract all
+// three were actually written against, in one place, rather than patching
+// each call site's regex.
+const CONSOLE_LOG_PREFIX = /^\[\d{2}:\d{2}:\d{2}\] \[[^\]]+\]:\s*/;
+
+function stripConsoleLogPrefix(text: string): string {
+  return text.replace(CONSOLE_LOG_PREFIX, "");
+}
 
 interface PendingCommand {
   command: string;
@@ -202,7 +223,7 @@ export class AttachConsoleSession {
     const stripped = stripAnsi(rawText);
 
     if (pending.responseMatcher) {
-      if (pending.responseMatcher.test(stripped)) this.settleFront("resolve", stripped);
+      if (pending.responseMatcher.test(stripped)) this.settleFront("resolve", stripConsoleLogPrefix(stripped));
       return;
     }
 

@@ -51,7 +51,13 @@ describe("AttachConsoleSession", () => {
     expect(seen).toEqual(["[32mHello[0m"]);
   });
 
-  it("resolves a 'list' command against the strict response regex, stripped of ANSI", async () => {
+  it("resolves a 'list' command against a real, timestamp-prefixed console line, stripped of ANSI and the log prefix", async () => {
+    // Real captured shape (verified against an actual server, not assumed):
+    // "[09:47:18] [Server thread/INFO]: There are 0 of a max of 20 players online: ".
+    // A response value that still carried this prefix silently broke
+    // PlayerActivityTracker.parseOnlineNames()/PlayerService.getOnlinePlayerNames()
+    // (both split on the *first* colon, landing inside the timestamp) --
+    // this test pins the exact real format so that regression can't return.
     const container = makeFakeContainer();
     const session = new AttachConsoleSession(container);
     await session.open();
@@ -59,11 +65,11 @@ describe("AttachConsoleSession", () => {
     const pending = session.sendCommand("list");
     expect(container.__stream.write).toHaveBeenCalledWith("list\n");
 
-    emitLine(container, "[33mThere are 2 of a max of 20 players online: Alice, Bob[0m");
+    emitLine(container, "[09:47:18] [32m[Server thread/INFO]: There are 2 of a max of 20 players online: Alice, Bob[0m");
     await expect(pending).resolves.toBe("There are 2 of a max of 20 players online: Alice, Bob");
   });
 
-  it("never hides a matched line from the live feed — matching only copies", async () => {
+  it("never hides a matched line from the live feed (raw, prefix intact) even though the resolved value is prefix-stripped", async () => {
     const container = makeFakeContainer();
     const session = new AttachConsoleSession(container);
     await session.open();
@@ -71,10 +77,10 @@ describe("AttachConsoleSession", () => {
     const seen: string[] = [];
     session.onLine((line) => seen.push(line.text));
     const pending = session.sendCommand("list");
-    emitLine(container, "There are 0 of a max of 20 players online:");
+    emitLine(container, "[09:47:18] [Server thread/INFO]: There are 0 of a max of 20 players online: ");
 
-    await pending;
-    expect(seen).toEqual(["There are 0 of a max of 20 players online:"]);
+    await expect(pending).resolves.toBe("There are 0 of a max of 20 players online: ");
+    expect(seen).toEqual(["[09:47:18] [Server thread/INFO]: There are 0 of a max of 20 players online: "]);
   });
 
   it("falls back to quiet-window capture for any command other than list (nothing reads its return value in practice)", async () => {
