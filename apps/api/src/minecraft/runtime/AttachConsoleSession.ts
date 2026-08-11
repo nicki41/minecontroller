@@ -22,31 +22,31 @@ const MAX_QUEUE_DEPTH = 20;
 // it only needs the generic quiet-window capture below, not its own regex.
 const LIST_COMMAND = /^list\b/i;
 // No leading ^ anchor: a real console line is always prefixed with a
-// timestamp + logger tag (e.g. "[12:34:56] [Server thread/INFO]: "), so an
-// anchored match against the raw line can never fire — confirmed against a
-// real server's actual output (not just this file's own unit tests, which
-// is exactly how this slipped through the first time).
+// timestamp + logger tag, so an anchored match against the raw line can
+// never fire — confirmed against a real server's actual output (not just
+// this file's own unit tests, which is exactly how this first slipped
+// through). That prefix isn't one fixed shape, either: Vanilla logs
+// "[12:34:56] [Server thread/INFO]: ...", Paper logs the shorter
+// "[12:34:56 INFO]: ..." (no thread name, single bracket) — confirmed live
+// against both. Rather than maintain a prefix pattern per software (fragile,
+// and the exact cause of a real bug — see settleFront's use of match.index
+// below), the response value is sliced from wherever this regex actually
+// matched, which is correct regardless of what precedes it.
 const LIST_RESPONSE = /There are \d+ of a max of \d+ players online/i;
-
-// That same prefix must be stripped from the text handed back to the
-// caller, too: PlayerActivityTracker.parseOnlineNames() and
-// PlayerService.getOnlinePlayerNames() both split on the *first* colon in
-// the response (":\s*(.+)$"), written against RCON's reply text, which
-// never carried this prefix — left in place, they'd split inside the
-// timestamp itself ("[12" / "34:56]...") instead of after "online:".
-// MetricsHistoryCollector.parsePlayerCount()'s unanchored regex happens to
-// be immune, but stripping here restores the exact clean-text contract all
-// three were actually written against, in one place, rather than patching
-// each call site's regex.
-const CONSOLE_LOG_PREFIX = /^\[\d{2}:\d{2}:\d{2}\] \[[^\]]+\]:\s*/;
-
-function stripConsoleLogPrefix(text: string): string {
-  return text.replace(CONSOLE_LOG_PREFIX, "");
-}
 
 interface PendingCommand {
   command: string;
   responseMatcher: RegExp | null;
+  /**
+   * True for commands the panel issues for its own bookkeeping (periodic
+   * `list` polling, moderation actions triggered from the UI, etc.) rather
+   * than something a human typed into the Console tab. Suppresses this
+   * command's echo + response from the live console feed entirely, matching
+   * RCON's old behavior — RCON used a wholly separate connection, so none of
+   * this ever reached the console; a shared stdin/stdout stream has no such
+   * separation for free, so it has to be suppressed explicitly instead.
+   */
+  silent: boolean;
   captured: string[];
   quietTimer: ReturnType<typeof setTimeout> | null;
   timeoutTimer: ReturnType<typeof setTimeout>;
@@ -114,7 +114,7 @@ export class AttachConsoleSession {
     return [...this.buffer];
   }
 
-  async sendCommand(command: string, opts: { timeoutMs?: number } = {}): Promise<string> {
+  async sendCommand(command: string, opts: { timeoutMs?: number; silent?: boolean } = {}): Promise<string> {
     if (!this.stream) throw new Error("Console is not open.");
     const clean = singleLine(command);
     if (!clean) throw new Error("Command cannot be empty.");
@@ -126,6 +126,7 @@ export class AttachConsoleSession {
       const pending: PendingCommand = {
         command: clean,
         responseMatcher: LIST_COMMAND.test(clean) ? LIST_RESPONSE : null,
+        silent: opts.silent ?? false,
         captured: [],
         quietTimer: null,
         resolve,
@@ -205,17 +206,26 @@ export class AttachConsoleSession {
   }
 
   private appendLine(text: string): void {
+    // Captured before matchAgainstPendingCommand() runs, which may shift
+    // this command off the queue (settle it) — the visibility of THIS line
+    // depends on whether it belonged to a silent command, not whatever
+    // ends up at queue[0] afterward.
+    const silent = this.queue[0]?.silent === true;
+
+    this.matchAgainstPendingCommand(text);
+    if (silent) return; // echo + response of a silent command — never surfaced, matching RCON's old separation
+
     const line: ConsoleLine = { timestamp: Date.now(), text };
     this.buffer.push(line);
     if (this.buffer.length > MAX_BUFFERED_LINES) this.buffer.shift();
     for (const listener of this.lineListeners) listener(line);
-    this.matchAgainstPendingCommand(text);
   }
 
   /**
-   * Every line is broadcast above unconditionally, whether or not it's also
-   * captured as a command's response — matching only ever copies, never
-   * hides a line from the live feed.
+   * Every line is broadcast above unconditionally (unless silent — see
+   * appendLine), whether or not it's also captured as a command's response —
+   * matching only ever copies, never hides a line from the live feed on its
+   * own.
    */
   private matchAgainstPendingCommand(rawText: string): void {
     const pending = this.queue[0];
@@ -223,7 +233,14 @@ export class AttachConsoleSession {
     const stripped = stripAnsi(rawText);
 
     if (pending.responseMatcher) {
-      if (pending.responseMatcher.test(stripped)) this.settleFront("resolve", stripConsoleLogPrefix(stripped));
+      // Sliced from the match position onward, not a fixed-length prefix
+      // strip — real prefixes vary by software (see LIST_RESPONSE's comment)
+      // and getting this wrong previously fed raw, un-stripped lines into
+      // PlayerActivityTracker's username parsing, which happily treated the
+      // whole garbled line as a "player name" and briefly showed it as an
+      // online player.
+      const match = pending.responseMatcher.exec(stripped);
+      if (match) this.settleFront("resolve", stripped.slice(match.index));
       return;
     }
 

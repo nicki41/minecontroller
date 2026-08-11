@@ -13,7 +13,7 @@ export interface PlayerActivityManager {
   on(event: "status", listener: (serverId: string, status: ServerStatus) => void): unknown;
   off(event: "status", listener: (serverId: string, status: ServerStatus) => void): unknown;
   getLogStream(serverId: string, options?: { tail?: number }): Promise<Readable>;
-  sendCommand(serverId: string, command: string): Promise<string>;
+  sendCommand(serverId: string, command: string, options?: { silent?: boolean }): Promise<string>;
 }
 
 /** Real Minecraft usernames only — guards every capture below against chat messages that happen to contain phrases like "joined the game" (e.g. a player literally typing that), since a genuine username never contains spaces or angle brackets. */
@@ -279,7 +279,7 @@ export class PlayerActivityTracker {
 
     let onlineNames: string[];
     try {
-      const response = await this.manager.sendCommand(serverId, "list");
+      const response = await this.manager.sendCommand(serverId, "list", { silent: true });
       onlineNames = parseOnlineNames(response).filter((n) => VALID_USERNAME.test(n));
     } catch {
       return; // RCON not ready yet, or server isn't actually running — skip this tick

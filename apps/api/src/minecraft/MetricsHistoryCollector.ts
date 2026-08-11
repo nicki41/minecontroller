@@ -60,7 +60,7 @@ export class MetricsHistoryCollector {
       const [diskUsageBytes, playerCount] = await Promise.all([
         sampleDisk ? this.manager.getDiskUsageBytes(serverId).catch(() => null) : Promise.resolve(null),
         this.manager
-          .sendCommand(serverId, "list")
+          .sendCommand(serverId, "list", { silent: true })
           .then(parsePlayerCount)
           .catch(() => null), // RCON not ready right after start, or server stopped mid-poll — skip player count this sample
       ]);

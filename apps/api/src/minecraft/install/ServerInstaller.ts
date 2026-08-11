@@ -89,7 +89,23 @@ export class ServerInstaller {
     // already uses via its single MEMORY env var) — avoids heap-resize
     // pauses. Resolved from the DB's current memoryMb at install/recreate
     // time, not parsed from an env var inside the container.
-    const script = `#!/bin/sh\nexec java -Xms${memoryMb}M -Xmx${memoryMb}M -jar "${jarFilename}" nogui\n`;
+    //
+    // The three -D flags disable JLine, the interactive line-editing library
+    // Vanilla/Paper/Forge/NeoForge/Fabric all bundle for their console
+    // reader. With stdin genuinely open (needed for AttachConsoleSession),
+    // JLine detects a "real" interactive terminal and actively manages it —
+    // printing a "> " prompt, redrawing it after every log line, toggling
+    // bracketed-paste/keypad modes — which is exactly right for a human at a
+    // real terminal and pure garbage (raw cursor-movement escape codes) once
+    // captured as a byte stream and rendered as discrete lines in a browser.
+    // -Dterminal.jline=false/-Dterminal.ansi=true are Paper's own documented
+    // flags for this exact scenario (external tools piping stdin/stdout);
+    // -Djline.terminal=jline.UnsupportedTerminal is JLine's own older,
+    // broader property, kept alongside for Vanilla/Forge/NeoForge/Fabric.
+    // None of this affects the server's ability to *receive* commands via
+    // stdin — only how it manages terminal display feedback.
+    const jvmFlags = "-Djline.terminal=jline.UnsupportedTerminal -Dterminal.jline=false -Dterminal.ansi=true";
+    const script = `#!/bin/sh\nexec java ${jvmFlags} -Xms${memoryMb}M -Xmx${memoryMb}M -jar "${jarFilename}" nogui\n`;
     await fs.writeFile(destPath, script, { mode: 0o755 });
   }
 }

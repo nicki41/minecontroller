@@ -69,6 +69,23 @@ describe("AttachConsoleSession", () => {
     await expect(pending).resolves.toBe("There are 2 of a max of 20 players online: Alice, Bob");
   });
 
+  it("resolves a 'list' command against Paper's single-bracket log format too (no thread name, different shape than Vanilla's)", async () => {
+    // Real bug: Paper logs "[13:57:58 INFO]: ..." (one bracket, no thread
+    // name) — different from Vanilla's "[HH:MM:SS] [Thread/LEVEL]: " tested
+    // above. A fixed-prefix-strip regex tuned for Vanilla's shape left this
+    // one untouched, and PlayerActivityTracker's naive first-colon split
+    // then treated the entire raw line as a "player name" — briefly showing
+    // a fake online player named after the garbled log line in production.
+    const container = makeFakeContainer();
+    const session = new AttachConsoleSession(container);
+    await session.open();
+
+    const pending = session.sendCommand("list");
+    emitLine(container, "[13:58:32 INFO]: There are 0 of a max of 20 players online: ");
+
+    await expect(pending).resolves.toBe("There are 0 of a max of 20 players online: ");
+  });
+
   it("never hides a matched line from the live feed (raw, prefix intact) even though the resolved value is prefix-stripped", async () => {
     const container = makeFakeContainer();
     const session = new AttachConsoleSession(container);
@@ -170,5 +187,55 @@ describe("AttachConsoleSession", () => {
 
     await expect(pending).rejects.toThrow();
     expect(session.isOpen).toBe(false);
+  });
+
+  describe("silent commands", () => {
+    it("suppresses a silent command's echo and response from onLine — background polling shouldn't spam the console", async () => {
+      const container = makeFakeContainer();
+      const session = new AttachConsoleSession(container);
+      await session.open();
+
+      const seen: string[] = [];
+      session.onLine((line) => seen.push(line.text));
+
+      const pending = session.sendCommand("list", { silent: true });
+      emitLine(container, "list"); // the pty's own echo of what was written
+      emitLine(container, "[13:58:32 INFO]: There are 0 of a max of 20 players online: ");
+
+      await expect(pending).resolves.toBe("There are 0 of a max of 20 players online: ");
+      expect(seen).toEqual([]);
+    });
+
+    it("still resolves the caller's promise normally even though the console never sees it", async () => {
+      const container = makeFakeContainer();
+      const session = new AttachConsoleSession(container);
+      await session.open();
+
+      const pending = session.sendCommand("op Steve", { silent: true });
+      emitLine(container, "Made Steve a server operator");
+      await vi.advanceTimersByTimeAsync(400);
+
+      await expect(pending).resolves.toBe("Made Steve a server operator");
+    });
+
+    it("a non-silent command queued right after a silent one is still fully visible", async () => {
+      const container = makeFakeContainer();
+      const session = new AttachConsoleSession(container);
+      await session.open();
+
+      const seen: string[] = [];
+      session.onLine((line) => seen.push(line.text));
+
+      const silent = session.sendCommand("list", { silent: true });
+      emitLine(container, "[13:58:32 INFO]: There are 0 of a max of 20 players online: ");
+      await silent;
+
+      const visible = session.sendCommand("say hi"); // e.g. a user-typed console command
+      emitLine(container, "[Not Secure] [Server] hi");
+      await vi.advanceTimersByTimeAsync(400);
+      await visible;
+
+      expect(seen).toEqual(["[Not Secure] [Server] hi"]);
+    });
   });
 });

@@ -319,7 +319,15 @@ export class MinecraftServerManager extends EventEmitter {
   }
 
   /** Best-effort: not every command needs a reply the caller cares about (e.g. console input echoed from the UI). */
-  async sendCommand(serverId: string, command: string): Promise<string> {
+  /**
+   * `silent` (PANEL_MANAGED only — RCON never touched the visible console
+   * either way): pass true for commands the panel issues for its own
+   * bookkeeping (periodic `list` polling, moderation actions triggered from
+   * the UI) rather than something a human typed into the Console tab, so it
+   * doesn't spam the live feed. Defaults to false — visible — matching a
+   * user-typed command's existing echo+response behavior.
+   */
+  async sendCommand(serverId: string, command: string, options: { silent?: boolean } = {}): Promise<string> {
     const server = await this.requireServer(serverId);
     if (server.status !== "RUNNING") throw new ConflictError("Server is not running.");
 
@@ -327,7 +335,7 @@ export class MinecraftServerManager extends EventEmitter {
       if (!server.containerId) throw new ConflictError("Server has no container yet.");
       const session = this.getOrCreateAttachSession(server.id, server.containerId);
       await session.open();
-      return session.sendCommand(command);
+      return session.sendCommand(command, { silent: options.silent });
     }
 
     const rcon = this.createRconClient(server);

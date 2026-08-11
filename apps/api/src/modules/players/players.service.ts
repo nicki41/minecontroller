@@ -143,7 +143,7 @@ export class PlayerService {
   private async getOnlinePlayerNames(server: Server): Promise<string[]> {
     if (server.status !== "RUNNING") return [];
     try {
-      const response = await this.manager.sendCommand(server.id, "list");
+      const response = await this.manager.sendCommand(server.id, "list", { silent: true });
       // "There are 2 of a max of 20 players online: Alice, Bob"
       const match = /:\s*(.+)$/.exec(response.trim());
       if (!match?.[1]) return [];
@@ -165,7 +165,7 @@ export class PlayerService {
   async op(server: Server, username: string): Promise<void> {
     assertValidUsername(username);
     if (server.status === "RUNNING") {
-      await this.manager.sendCommand(server.id, `op ${username}`);
+      await this.manager.sendCommand(server.id, `op ${username}`, { silent: true });
       return;
     }
     await addOpsEntry(this.prisma, server, username);
@@ -174,7 +174,7 @@ export class PlayerService {
   async deop(server: Server, username: string): Promise<void> {
     assertValidUsername(username);
     if (server.status === "RUNNING") {
-      await this.manager.sendCommand(server.id, `deop ${username}`);
+      await this.manager.sendCommand(server.id, `deop ${username}`, { silent: true });
       return;
     }
     await removeOpsEntry(server, username);
@@ -183,7 +183,7 @@ export class PlayerService {
   async whitelistAdd(server: Server, username: string): Promise<void> {
     assertValidUsername(username);
     if (server.status === "RUNNING") {
-      await this.manager.sendCommand(server.id, `whitelist add ${username}`);
+      await this.manager.sendCommand(server.id, `whitelist add ${username}`, { silent: true });
       return;
     }
     await addWhitelistEntry(this.prisma, server, username);
@@ -192,7 +192,7 @@ export class PlayerService {
   async whitelistRemove(server: Server, username: string): Promise<void> {
     assertValidUsername(username);
     if (server.status === "RUNNING") {
-      await this.manager.sendCommand(server.id, `whitelist remove ${username}`);
+      await this.manager.sendCommand(server.id, `whitelist remove ${username}`, { silent: true });
       return;
     }
     await removeWhitelistEntry(server, username);
@@ -202,14 +202,14 @@ export class PlayerService {
     assertValidUsername(username);
     await this.requireRunning(server);
     const cleanReason = sanitizeReason(reason);
-    await this.manager.sendCommand(server.id, cleanReason ? `kick ${username} ${cleanReason}` : `kick ${username}`);
+    await this.manager.sendCommand(server.id, cleanReason ? `kick ${username} ${cleanReason}` : `kick ${username}`, { silent: true });
   }
 
   async ban(server: Server, username: string, reason?: string): Promise<void> {
     assertValidUsername(username);
     const cleanReason = sanitizeReason(reason);
     if (server.status === "RUNNING") {
-      await this.manager.sendCommand(server.id, cleanReason ? `ban ${username} ${cleanReason}` : `ban ${username}`);
+      await this.manager.sendCommand(server.id, cleanReason ? `ban ${username} ${cleanReason}` : `ban ${username}`, { silent: true });
       return;
     }
     await addBannedPlayerEntry(this.prisma, server, username, cleanReason, null);
@@ -218,7 +218,7 @@ export class PlayerService {
   async unban(server: Server, username: string): Promise<void> {
     assertValidUsername(username);
     if (server.status === "RUNNING") {
-      await this.manager.sendCommand(server.id, `pardon ${username}`);
+      await this.manager.sendCommand(server.id, `pardon ${username}`, { silent: true });
       return;
     }
     await removeBannedPlayerEntry(server, username);
@@ -228,14 +228,14 @@ export class PlayerService {
   async setGamemode(server: Server, username: string, mode: "SURVIVAL" | "CREATIVE" | "ADVENTURE" | "SPECTATOR"): Promise<void> {
     assertValidUsername(username);
     await this.requireRunning(server);
-    await this.manager.sendCommand(server.id, `gamemode ${mode.toLowerCase()} ${username}`);
+    await this.manager.sendCommand(server.id, `gamemode ${mode.toLowerCase()} ${username}`, { silent: true });
   }
 
   async message(server: Server, username: string, text: string): Promise<void> {
     assertValidUsername(username);
     await this.requireRunning(server);
     const cleanText = sanitizeMessage(text);
-    await this.manager.sendCommand(server.id, `tell ${username} ${cleanText}`);
+    await this.manager.sendCommand(server.id, `tell ${username} ${cleanText}`, { silent: true });
   }
 
   /**
@@ -255,7 +255,7 @@ export class PlayerService {
     if (server.status === "RUNNING") {
       const online = (await this.getOnlinePlayerNames(server)).some((n) => n.toLowerCase() === username.toLowerCase());
       if (online) {
-        await this.manager.sendCommand(server.id, `kick ${username} Your data is being reset by an administrator.`);
+        await this.manager.sendCommand(server.id, `kick ${username} Your data is being reset by an administrator.`, { silent: true });
         await sleep(1000);
       }
     }

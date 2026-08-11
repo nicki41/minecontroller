@@ -181,7 +181,7 @@ describe("PlayerService", () => {
 
       await service.message(makeServer(), "Steve", "Hello there\nfriend");
 
-      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", "tell Steve Hello there friend");
+      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", "tell Steve Hello there friend", { silent: true });
     });
 
     it("rejects an invalid username", async () => {
@@ -215,12 +215,12 @@ describe("PlayerService", () => {
       await service.ban(server, "Steve", "Griefing");
       await service.unban(server, "Steve");
 
-      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", "op Steve");
-      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", "deop Steve");
-      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", "whitelist add Steve");
-      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", "whitelist remove Steve");
-      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", "ban Steve Griefing");
-      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", "pardon Steve");
+      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", "op Steve", { silent: true });
+      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", "deop Steve", { silent: true });
+      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", "whitelist add Steve", { silent: true });
+      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", "whitelist remove Steve", { silent: true });
+      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", "ban Steve Griefing", { silent: true });
+      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", "pardon Steve", { silent: true });
     });
   });
 
@@ -344,7 +344,7 @@ describe("PlayerService", () => {
 
       await service.wipe(makeServer({ status: "RUNNING" }), "Steve");
 
-      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", expect.stringContaining("kick Steve"));
+      expect(manager.sendCommand).toHaveBeenCalledWith("srv-1", expect.stringContaining("kick Steve"), { silent: true });
     });
 
     it("rejects when no UUID is known for the player", async () => {

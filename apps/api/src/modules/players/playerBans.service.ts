@@ -55,7 +55,7 @@ export class PlayerBanService {
     const cleanReason = sanitizeReason(reason);
     const expiresAt = new Date(Date.now() + durationMinutes * 60_000);
     if (server.status === "RUNNING") {
-      await this.manager.sendCommand(server.id, cleanReason ? `ban ${username} ${cleanReason}` : `ban ${username}`);
+      await this.manager.sendCommand(server.id, cleanReason ? `ban ${username} ${cleanReason}` : `ban ${username}`, { silent: true });
     } else {
       await addBannedPlayerEntry(this.prisma, server, username, cleanReason, expiresAt);
     }
@@ -78,7 +78,7 @@ export class PlayerBanService {
     assertValidUsername(contextUsername);
     const cleanReason = sanitizeReason(reason);
     if (server.status === "RUNNING") {
-      await this.manager.sendCommand(server.id, cleanReason ? `ban-ip ${ip} ${cleanReason}` : `ban-ip ${ip}`);
+      await this.manager.sendCommand(server.id, cleanReason ? `ban-ip ${ip} ${cleanReason}` : `ban-ip ${ip}`, { silent: true });
     } else {
       await addBannedIpEntry(server, ip, cleanReason);
     }
@@ -98,7 +98,7 @@ export class PlayerBanService {
 
   async unbanIp(server: Server, ip: string, actorUserId: string): Promise<void> {
     if (server.status === "RUNNING") {
-      await this.manager.sendCommand(server.id, `pardon-ip ${ip}`);
+      await this.manager.sendCommand(server.id, `pardon-ip ${ip}`, { silent: true });
     } else {
       await removeBannedIpEntry(server, ip);
     }
@@ -129,7 +129,7 @@ export class PlayerBanService {
 
 /** The subset of MinecraftServerManager expireDueBans needs — lets PlayerActivityTracker call it with its own narrower PlayerActivityManager interface instead of the concrete class. */
 interface CommandSender {
-  sendCommand(serverId: string, command: string): Promise<string>;
+  sendCommand(serverId: string, command: string, options?: { silent?: boolean }): Promise<string>;
 }
 
 /**
@@ -143,7 +143,7 @@ export async function expireDueBans(prisma: PrismaClient, manager: CommandSender
   });
   for (const ban of due) {
     try {
-      await manager.sendCommand(serverId, `pardon ${ban.username}`);
+      await manager.sendCommand(serverId, `pardon ${ban.username}`, { silent: true });
       await prisma.playerBan.update({ where: { id: ban.id }, data: { revokedAt: new Date(), revokedById: null } });
     } catch (err) {
       logger.debug({ err, serverId, banId: ban.id }, "Failed to auto-expire tempban");
