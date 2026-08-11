@@ -1,5 +1,5 @@
 import type { Server } from "@prisma/client";
-import type { AccessLevel, ServerDto, ServerSoftware, ServerStatus } from "@minecraftpanel/shared";
+import type { AccessLevel, ServerDto, ServerRuntime, ServerSoftware, ServerStatus } from "@minecraftpanel/shared";
 
 // SQLite has no native enum type, so Server.software/status are plain
 // strings at the Prisma layer; validity is enforced at write time via Zod
@@ -12,6 +12,7 @@ export function serializeServer(server: Server, myAccessLevel: AccessLevel): Ser
     description: server.description,
     software: server.software as ServerSoftware,
     mcVersion: server.mcVersion,
+    runtime: server.runtime as ServerRuntime,
     status: server.status as ServerStatus,
     statusDetail: server.statusDetail,
     port: server.port,

@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { Dirent } from "node:fs";
@@ -8,6 +7,7 @@ import { pluginTerminologyFor } from "@minecraftpanel/shared";
 import { env } from "../../config/env.js";
 import { safeResolve } from "../../lib/safePath.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
+import { downloadAndVerify } from "../../lib/download.js";
 import { ModrinthClient } from "./modrinth.client.js";
 
 /** Suffix a paused plugin/mod's filename carries — see listInstalled() and pause()/resume(). */
@@ -34,35 +34,6 @@ function installDirFor(server: Pick<Server, "software">): string | null {
  * Only Modrinth's own file CDN is trusted as a download source.
  */
 const ALLOWED_DOWNLOAD_HOSTS = new Set(["cdn.modrinth.com"]);
-
-function assertTrustedDownloadUrl(rawUrl: string): void {
-  let parsed: URL;
-  try {
-    parsed = new URL(rawUrl);
-  } catch {
-    throw new BadRequestError("Modrinth returned an invalid file URL.");
-  }
-  if (parsed.protocol !== "https:" || !ALLOWED_DOWNLOAD_HOSTS.has(parsed.hostname)) {
-    throw new BadRequestError("Refusing to download from an untrusted host.");
-  }
-}
-
-async function downloadAndVerify(url: string, expectedSha1?: string, expectedSha512?: string): Promise<Buffer> {
-  assertTrustedDownloadUrl(url);
-  const res = await fetch(url, { signal: AbortSignal.timeout(120_000) });
-  if (!res.ok) throw new BadRequestError(`Failed to download file from Modrinth: ${res.status} ${res.statusText}`);
-  const buffer = Buffer.from(await res.arrayBuffer());
-
-  if (expectedSha512) {
-    const actual = crypto.createHash("sha512").update(buffer).digest("hex");
-    if (actual !== expectedSha512) throw new BadRequestError("Downloaded file failed SHA-512 integrity check.");
-  } else if (expectedSha1) {
-    const actual = crypto.createHash("sha1").update(buffer).digest("hex");
-    if (actual !== expectedSha1) throw new BadRequestError("Downloaded file failed SHA-1 integrity check.");
-  }
-
-  return buffer;
-}
 
 export class ModrinthService {
   private readonly client = new ModrinthClient();
@@ -94,7 +65,7 @@ export class ModrinthService {
     const existing = await fs.stat(destPath).catch(() => null);
     if (existing) throw new ConflictError(`${file.filename} is already installed on this server.`);
 
-    const buffer = await downloadAndVerify(file.url, file.hashes.sha1, file.hashes.sha512);
+    const buffer = await downloadAndVerify(file.url, ALLOWED_DOWNLOAD_HOSTS, { sha1: file.hashes.sha1, sha512: file.hashes.sha512 });
 
     await fs.mkdir(path.dirname(destPath), { recursive: true });
     await fs.writeFile(destPath, buffer);

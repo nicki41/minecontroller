@@ -1,7 +1,7 @@
 import { httpFetchJson } from "../../lib/httpFetch.js";
 import { createTtlCache } from "../../lib/ttlCache.js";
 import { BadRequestError } from "../../lib/errors.js";
-import type { MinecraftServerProvider, ProviderVersion, VersionMap } from "./types.js";
+import type { InstallPlan, MinecraftServerProvider, ProviderVersion, VersionMap } from "./types.js";
 
 const VERSIONS_URL = "https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge";
 const ONE_HOUR_MS = 60 * 60 * 1000;
@@ -86,5 +86,12 @@ export class NeoForgeProvider implements MinecraftServerProvider {
     const entry = map.get(mcVersion);
     if (!entry) throw new BadRequestError(`Unknown NeoForge-supported Minecraft version: ${mcVersion}`);
     return { TYPE: "NEOFORGE", ...entry.env };
+  }
+
+  // TODO(milestone-5): real installer-jar plan, same shape as ForgeProvider.
+  // Until then, panel-managed NeoForge servers aren't creatable — legacy
+  // (itzg) ones are unaffected.
+  async resolveInstallPlan(): Promise<InstallPlan> {
+    throw new BadRequestError("NeoForge servers aren't supported by the new install pipeline yet.");
   }
 }

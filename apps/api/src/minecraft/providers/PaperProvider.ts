@@ -1,7 +1,8 @@
 import { httpFetchJson } from "../../lib/httpFetch.js";
 import { createTtlCache } from "../../lib/ttlCache.js";
 import { BadRequestError } from "../../lib/errors.js";
-import type { MinecraftServerProvider, ProviderVersion, VersionMap } from "./types.js";
+import { resolveJavaMajor } from "../runtime/runtimeImages.js";
+import type { InstallPlan, MinecraftServerProvider, ProviderVersion, VersionMap } from "./types.js";
 
 // PaperMC retired the old api.papermc.io/v2 API (stopped receiving builds
 // end of 2025) in favor of the "Fill" v3 API.
@@ -10,6 +11,12 @@ const ONE_HOUR_MS = 60 * 60 * 1000;
 
 interface PaperProjectResponse {
   versions: Record<string, string[]>;
+}
+
+interface PaperBuild {
+  id: number;
+  channel: string;
+  downloads: Record<string, { name: string; checksums: { sha256: string }; url: string }>;
 }
 
 export class PaperProvider implements MinecraftServerProvider {
@@ -41,5 +48,34 @@ export class PaperProvider implements MinecraftServerProvider {
     // PAPER_BUILD intentionally left unset — the runtime image resolves the
     // latest build for the given VERSION on its own.
     return { TYPE: "PAPER", ...entry.env };
+  }
+
+  async resolveInstallPlan(mcVersion: string): Promise<InstallPlan> {
+    const map = await this.cache();
+    if (!map.has(mcVersion)) throw new BadRequestError(`Unknown Paper version: ${mcVersion}`);
+
+    const builds = await httpFetchJson<PaperBuild[]>(`${PROJECT_URL}/versions/${encodeURIComponent(mcVersion)}/builds`, this.userAgent);
+    const stable = builds.filter((b) => b.channel === "STABLE");
+    // Fall back to the newest build overall if this version has no stable
+    // build yet, rather than refusing to install it at all.
+    const pool = stable.length ? stable : builds;
+    if (!pool.length) throw new BadRequestError(`No Paper builds available for ${mcVersion}.`);
+    const best = pool.reduce((a, b) => (b.id > a.id ? b : a));
+    const download = best.downloads["server:default"];
+    if (!download) throw new BadRequestError(`Paper build ${best.id} has no server download.`);
+
+    // Paper's build API doesn't report a Java requirement — Paper runs on
+    // top of the underlying Vanilla mcVersion, whose requirement applies
+    // equally here (see runtimeImages.resolveJavaMajor).
+    const javaMajor = await resolveJavaMajor(mcVersion, this.userAgent);
+
+    return {
+      kind: "direct-download",
+      url: download.url,
+      filename: download.name,
+      sha256: download.checksums.sha256,
+      javaMajor,
+      loaderVersion: String(best.id),
+    };
   }
 }

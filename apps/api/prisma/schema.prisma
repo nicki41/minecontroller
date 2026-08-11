@@ -140,8 +140,24 @@ model Server {
   /// note on ServerAccess.level for why this is String, not a DB enum.
   software  String
   mcVersion String
-  /// Software-specific build/loader/installer version (e.g. Paper build, Fabric loader, Forge/NeoForge version). Null for Vanilla.
+  /// Software-specific build/loader/installer version (e.g. Paper build, Fabric loader, Forge/NeoForge version). Null for Vanilla (LEGACY) or unresolved (PANEL_MANAGED).
   buildVersion String?
+
+  /// ServerRuntime union (LEGACY/PANEL_MANAGED) — see the type doc comment in
+  /// packages/shared for the full rationale. Fixed at creation, never changes:
+  /// existing rows stay LEGACY forever (itzg image + RCON), new rows are
+  /// always PANEL_MANAGED (panel-owned install + direct console attach).
+  runtime String @default("LEGACY")
+  /// The exact runtime image tag (e.g. "mcpanel-runtime:java21") resolved at
+  /// install time and reused on every recreateContainer() so a Restart never
+  /// silently changes a server's JVM. Null for LEGACY, which always uses the
+  /// global env.MINECRAFT_IMAGE.
+  javaImageTag String?
+  /// JSON blob recording exactly what was installed — {kind, downloadUrl,
+  /// sha256, installerUrl, loaderVersion, resolvedAt} — so recreateContainer()
+  /// reuses it instead of re-resolving "latest" on every restart, and so a
+  /// stuck/failed install has a debugging trail. Null for LEGACY.
+  installManifest String?
 
   containerId   String? @unique
   containerName String  @unique

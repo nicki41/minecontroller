@@ -1,7 +1,7 @@
 import { httpFetchJson } from "../../lib/httpFetch.js";
 import { createTtlCache } from "../../lib/ttlCache.js";
 import { BadRequestError } from "../../lib/errors.js";
-import type { MinecraftServerProvider, ProviderVersion, VersionMap } from "./types.js";
+import type { InstallPlan, MinecraftServerProvider, ProviderVersion, VersionMap } from "./types.js";
 
 const PROMOTIONS_URL = "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json";
 const ONE_HOUR_MS = 60 * 60 * 1000;
@@ -47,5 +47,13 @@ export class ForgeProvider implements MinecraftServerProvider {
     const entry = map.get(mcVersion);
     if (!entry) throw new BadRequestError(`Unknown Forge-supported Minecraft version: ${mcVersion}`);
     return { TYPE: "FORGE", ...entry.env };
+  }
+
+  // TODO(milestone-5): real installer-jar plan, built from the existing
+  // build-pin resolution above plus run.sh/argfile parsing after the
+  // ephemeral installer container exits. Until then, panel-managed Forge
+  // servers aren't creatable — legacy (itzg) ones are unaffected.
+  async resolveInstallPlan(): Promise<InstallPlan> {
+    throw new BadRequestError("Forge servers aren't supported by the new install pipeline yet.");
   }
 }

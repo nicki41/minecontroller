@@ -1,7 +1,8 @@
 import { httpFetchJson } from "../../lib/httpFetch.js";
 import { createTtlCache } from "../../lib/ttlCache.js";
 import { BadRequestError } from "../../lib/errors.js";
-import type { MinecraftServerProvider, ProviderVersion, VersionMap } from "./types.js";
+import { getMojangVersionDetail, LEGACY_JAVA_MAJOR } from "../runtime/runtimeImages.js";
+import type { InstallPlan, MinecraftServerProvider, ProviderVersion, VersionMap } from "./types.js";
 
 const MANIFEST_URL = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
 const ONE_HOUR_MS = 60 * 60 * 1000;
@@ -34,5 +35,21 @@ export class VanillaProvider implements MinecraftServerProvider {
     const entry = map.get(mcVersion);
     if (!entry) throw new BadRequestError(`Unknown Vanilla version: ${mcVersion}`);
     return { TYPE: "VANILLA", ...entry.env };
+  }
+
+  async resolveInstallPlan(mcVersion: string): Promise<InstallPlan> {
+    const detail = await getMojangVersionDetail(mcVersion, this.userAgent);
+    if (!detail) throw new BadRequestError(`Unknown Vanilla version: ${mcVersion}`);
+    const server = detail.downloads.server;
+    if (!server) throw new BadRequestError(`Vanilla version ${mcVersion} has no server download available.`);
+
+    return {
+      kind: "direct-download",
+      url: server.url,
+      filename: "server.jar",
+      sha1: server.sha1,
+      javaMajor: detail.javaVersion?.majorVersion ?? LEGACY_JAVA_MAJOR,
+      loaderVersion: null,
+    };
   }
 }

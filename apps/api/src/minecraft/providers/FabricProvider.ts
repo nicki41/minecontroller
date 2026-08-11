@@ -1,7 +1,7 @@
 import { httpFetchJson } from "../../lib/httpFetch.js";
 import { createTtlCache } from "../../lib/ttlCache.js";
 import { BadRequestError } from "../../lib/errors.js";
-import type { MinecraftServerProvider, ProviderVersion, VersionMap } from "./types.js";
+import type { InstallPlan, MinecraftServerProvider, ProviderVersion, VersionMap } from "./types.js";
 
 const GAME_VERSIONS_URL = "https://meta.fabricmc.net/v2/versions/game";
 const ONE_HOUR_MS = 60 * 60 * 1000;
@@ -34,5 +34,13 @@ export class FabricProvider implements MinecraftServerProvider {
     // FABRIC_LOADER_VERSION / FABRIC_LAUNCHER_VERSION intentionally left
     // unset — the runtime image installs the latest loader for VERSION.
     return { TYPE: "FABRIC", ...entry.env };
+  }
+
+  // TODO(milestone-4): real installer-jar plan (loader/installer version
+  // resolution + ephemeral installer-container invocation). Until then,
+  // panel-managed Fabric servers aren't creatable — legacy (itzg) ones are
+  // unaffected, since they never call this method.
+  async resolveInstallPlan(): Promise<InstallPlan> {
+    throw new BadRequestError("Fabric servers aren't supported by the new install pipeline yet.");
   }
 }

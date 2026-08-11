@@ -1,5 +1,6 @@
 import type { Readable } from "node:stream";
 import Docker from "dockerode";
+import type { ServerRuntime } from "@minecraftpanel/shared";
 import { env } from "../../config/env.js";
 import { logger } from "../../lib/logger.js";
 
@@ -10,15 +11,19 @@ const CONTAINER_PREFIX = "mcpanel-";
 export interface CreateContainerOptions {
   serverId: string;
   containerName: string;
-  /** From MinecraftServerProvider#resolveEnv() — TYPE plus any loader/build pin. */
-  softwareEnv: Record<string, string>;
+  runtime: ServerRuntime;
   mcVersion: string;
   hostPort: number;
   memoryMb: number;
   cpuCores: number;
-  rconPassword: string;
   /** Must be true — the caller (MinecraftServerManager) is responsible for only ever passing the user's actual, explicit consent through here. */
   eulaAccepted: boolean;
+  /** LEGACY only — from MinecraftServerProvider#resolveEnv(): TYPE plus any loader/build pin. */
+  softwareEnv?: Record<string, string>;
+  /** LEGACY only. */
+  rconPassword?: string;
+  /** PANEL_MANAGED only — resolved by ServerInstaller via runtimeImages.resolveRuntimeImageTag(). */
+  javaImageTag?: string;
 }
 
 export interface ContainerStats {
@@ -72,13 +77,82 @@ export class DockerMinecraftRuntime {
     logger.info({ image }, "Image pull complete.");
   }
 
+  /**
+   * Unlike ensureImage()/env.MINECRAFT_IMAGE (a public image, pulled from a
+   * registry on first use), the runtime-images/* tags are built locally and
+   * never published anywhere — there's nothing to pull. A 404 here means
+   * the operator genuinely needs to build them first, so this fails with an
+   * actionable message instead of attempting (and confusingly failing) a
+   * registry pull.
+   */
+  private async ensureLocalImage(image: string): Promise<void> {
+    try {
+      await this.docker.getImage(image).inspect();
+    } catch (err) {
+      if (isDockerStatus(err, 404)) {
+        throw new Error(`Runtime image "${image}" is not built locally yet — build the images in runtime-images/ first.`);
+      }
+      throw err;
+    }
+  }
+
   async createContainer(options: CreateContainerOptions): Promise<string> {
-    await Promise.all([this.ensureNetwork(), this.ensureImage(env.MINECRAFT_IMAGE)]);
+    await this.ensureNetwork();
 
     // Always forward-slash: this string is interpreted by the Docker
     // daemon (always Linux, even under Docker Desktop), never by the API
     // process's own OS — see README "Docker socket & host paths".
     const hostDataDir = `${env.HOST_DATA_PATH.replace(/\/+$/, "")}/servers/${options.serverId}`;
+    const sharedHostConfig = {
+      Memory: options.memoryMb * 1024 * 1024,
+      MemorySwap: options.memoryMb * 1024 * 1024, // no swap beyond the memory limit
+      NanoCpus: Math.round(options.cpuCores * 1e9),
+      PidsLimit: 2048,
+      RestartPolicy: { Name: "unless-stopped" },
+      PortBindings: { [`${CONTAINER_GAME_PORT}/tcp`]: [{ HostPort: String(options.hostPort) }] },
+      Binds: [`${hostDataDir}:/data`],
+      LogConfig: { Type: "json-file", Config: { "max-size": "10m", "max-file": "3" } },
+    };
+
+    if (options.runtime === "PANEL_MANAGED") {
+      const image = options.javaImageTag;
+      if (!image) throw new Error("javaImageTag is required for a PANEL_MANAGED container.");
+      await this.ensureLocalImage(image);
+
+      const container = await this.docker.createContainer({
+        name: options.containerName,
+        Image: image,
+        // No env vars at all: ServerInstaller already wrote eula.txt and a
+        // fully-formed .mcpanel-launch.sh directly onto /data before this
+        // container was ever created — see the entrypoint, which just
+        // verifies those exist and execs the launch script.
+        Env: [],
+        Tty: true,
+        // Raw (non-multiplexed) attach for direct console access — no RCON
+        // involved at all for this runtime kind. StdinOnce:false keeps
+        // stdin open across multiple attach/detach cycles.
+        OpenStdin: true,
+        StdinOnce: false,
+        AttachStdin: true,
+        ExposedPorts: { [`${CONTAINER_GAME_PORT}/tcp`]: {} },
+        HostConfig: {
+          ...sharedHostConfig,
+          // Unlike the itzg-based container: the panel creates /data itself
+          // (already owned by uid 1000, matching this image's fixed
+          // "mcserver" user — see runtime-images/*/Dockerfile), so there's
+          // no root-at-boot chown/setuid step needed, and no elevated
+          // capabilities to grant for one. This container never runs as
+          // root at any point.
+          CapDrop: ["ALL"],
+          SecurityOpt: ["no-new-privileges:true"],
+        },
+        NetworkingConfig: { EndpointsConfig: { [env.MINECRAFT_NETWORK]: {} } },
+        Labels: { "minecraftpanel.serverId": options.serverId },
+      });
+      return container.id;
+    }
+
+    await this.ensureImage(env.MINECRAFT_IMAGE);
 
     const envVars: Record<string, string> = {
       // Never default to accepted: absent explicit, validated consent this
@@ -88,7 +162,7 @@ export class DockerMinecraftRuntime {
       MEMORY: `${options.memoryMb}M`,
       SERVER_PORT: String(CONTAINER_GAME_PORT),
       ENABLE_RCON: "true",
-      RCON_PASSWORD: options.rconPassword,
+      RCON_PASSWORD: options.rconPassword ?? "",
       RCON_PORT: String(CONTAINER_RCON_PORT),
       UID: "1000",
       GID: "1000",
@@ -116,10 +190,7 @@ export class DockerMinecraftRuntime {
       Tty: true,
       ExposedPorts: { [`${CONTAINER_GAME_PORT}/tcp`]: {} },
       HostConfig: {
-        Memory: options.memoryMb * 1024 * 1024,
-        MemorySwap: options.memoryMb * 1024 * 1024, // no swap beyond the memory limit
-        NanoCpus: Math.round(options.cpuCores * 1e9),
-        PidsLimit: 2048,
+        ...sharedHostConfig,
         // No CapDrop here (unlike the panel's own API container): the
         // itzg/docker-minecraft-server entrypoint starts as root and does
         // its own privilege drop to a "minecraft" user — chown'ing /data
@@ -133,10 +204,6 @@ export class DockerMinecraftRuntime {
         // either way — the long-running Minecraft process itself is
         // non-root — just via the image's own mechanism rather than ours.
         SecurityOpt: ["no-new-privileges:true"],
-        RestartPolicy: { Name: "unless-stopped" },
-        PortBindings: { [`${CONTAINER_GAME_PORT}/tcp`]: [{ HostPort: String(options.hostPort) }] },
-        Binds: [`${hostDataDir}:/data`],
-        LogConfig: { Type: "json-file", Config: { "max-size": "10m", "max-file": "3" } },
       },
       NetworkingConfig: { EndpointsConfig: { [env.MINECRAFT_NETWORK]: {} } },
       Labels: { "minecraftpanel.serverId": options.serverId },

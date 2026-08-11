@@ -2,6 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import fs from "node:fs/promises";
 import crypto from "node:crypto";
+import { EventEmitter } from "node:events";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MinecraftRuntime } from "./MinecraftServerManager.js";
 
@@ -30,7 +31,36 @@ vi.mock("./providers/index.js", () => ({
   getProvider: vi.fn(() => ({
     listVersions: vi.fn(async () => KNOWN_VERSIONS),
     resolveEnv: vi.fn(async (mcVersion: string) => ({ TYPE: "VANILLA", VERSION: mcVersion })),
+    resolveInstallPlan: vi.fn(async (mcVersion: string) => ({
+      kind: "direct-download",
+      url: "https://piston-data.mojang.com/v1/objects/fake/server.jar",
+      filename: "server.jar",
+      sha1: "fake-sha1",
+      javaMajor: 21,
+      loaderVersion: null,
+      mcVersion,
+    })),
   })),
+}));
+
+// Shared (not per-instance) so tests can assert on them regardless of which
+// MinecraftServerManager/ServerInstaller instance made the call — see
+// Vitest's vi.hoisted() docs for why this is the safe way to reference
+// mock fns from inside a (hoisted) vi.mock factory.
+const { installerInstallMock, installerRefreshLaunchScriptMock } = vi.hoisted(() => ({
+  installerInstallMock: vi.fn(async () => ({
+    buildVersion: null as string | null,
+    javaImageTag: "mcpanel-runtime:java21",
+    installManifest: JSON.stringify({ kind: "direct-download", filename: "server.jar" }),
+  })),
+  installerRefreshLaunchScriptMock: vi.fn(async () => {}),
+}));
+
+vi.mock("./install/ServerInstaller.js", () => ({
+  ServerInstaller: class {
+    install = installerInstallMock;
+    refreshLaunchScript = installerRefreshLaunchScriptMock;
+  },
 }));
 
 const { MinecraftServerManager } = await import("./MinecraftServerManager.js");
@@ -55,6 +85,14 @@ function makeFakePrisma() {
       containerId: null,
       diskLimitMb: null,
       description: null,
+      // Matches the Prisma column default — tests that build rows directly
+      // (not through the real createServer(), which always stamps
+      // PANEL_MANAGED) exercise the legacy/RCON path unless they override
+      // this, same as every pre-existing row in a real deployment.
+      runtime: "LEGACY",
+      javaImageTag: null,
+      installManifest: null,
+      buildVersion: null,
       ...base,
       ...data,
     };
@@ -107,7 +145,20 @@ function makeFakePrisma() {
   };
 }
 
+/** Fake attach stream for AttachConsoleSession — tests grab this via runtime.getContainer(...) to emit console lines (e.g. Minecraft's ready line) or simulate the connection dying. */
+function makeFakeAttachContainer(backlogText = "") {
+  const stream = new EventEmitter() as EventEmitter & { write: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn> };
+  stream.write = vi.fn();
+  stream.destroy = vi.fn();
+  return {
+    logs: vi.fn(async () => Buffer.from(backlogText)),
+    attach: vi.fn(async () => stream),
+    __stream: stream,
+  };
+}
+
 function makeFakeRuntime(overrides: Partial<MinecraftRuntime> = {}): MinecraftRuntime {
+  const fakeContainer = makeFakeAttachContainer();
   return {
     createContainer: vi.fn(async () => "container-abc123"),
     start: vi.fn(async () => {}),
@@ -121,8 +172,21 @@ function makeFakeRuntime(overrides: Partial<MinecraftRuntime> = {}): MinecraftRu
     getStats: vi.fn(async () => null),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getLogStream: vi.fn(async () => ({}) as any),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    getContainer: vi.fn(() => fakeContainer as any),
     ...overrides,
   };
+}
+
+/** Emits Minecraft's own ready line on the given fake attach container, repeatedly, until the assertion inside vi.waitFor passes — robust against not knowing exactly when AttachConsoleSession finished registering its listener. */
+async function emitReadyLineUntil(container: ReturnType<typeof makeFakeAttachContainer>, assertion: () => void | Promise<void>): Promise<void> {
+  await vi.waitFor(
+    async () => {
+      container.__stream.emit("data", Buffer.from('Done (1.234s)! For help, type "help"\n'));
+      await assertion();
+    },
+    { timeout: 2000, interval: 20 },
+  );
 }
 
 describe("MinecraftServerManager", () => {
@@ -131,6 +195,8 @@ describe("MinecraftServerManager", () => {
   beforeEach(async () => {
     tmpDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "mcpanel-server-manager-"));
     globalThis.__TEST_DATA_PATH__ = tmpDataPath;
+    installerInstallMock.mockClear();
+    installerRefreshLaunchScriptMock.mockClear();
   });
 
   afterEach(async () => {
@@ -174,21 +240,33 @@ describe("MinecraftServerManager", () => {
       expect(stat.isDirectory()).toBe(true);
     });
 
-    it("provisions the container in the background and reaches RUNNING", async () => {
+    it("provisions the container in the background and reaches RUNNING (PANEL_MANAGED — what createServer() always produces)", async () => {
       const prisma = makeFakePrisma();
       const runtime = makeFakeRuntime();
       const manager = new MinecraftServerManager(prisma as never, runtime);
       const server = await manager.createServer({ name: "Boots Up", software: "VANILLA", mcVersion: "1.21.1", memoryMb: 2048, cpuCores: 2, eulaAccepted: true });
 
-      await vi.waitFor(async () => {
+      expect(server.runtime).toBe("PANEL_MANAGED");
+      const container = runtime.getContainer("container-abc123") as unknown as ReturnType<typeof makeFakeAttachContainer>;
+      await emitReadyLineUntil(container, async () => {
         const row = await prisma.server.findUnique({ where: { id: server.id } });
         expect(row?.status).toBe("RUNNING");
       });
 
       expect(runtime.createContainer).toHaveBeenCalledWith(
-        expect.objectContaining({ serverId: server.id, memoryMb: 2048, cpuCores: 2, softwareEnv: { TYPE: "VANILLA", VERSION: "1.21.1" } }),
+        expect.objectContaining({
+          serverId: server.id,
+          memoryMb: 2048,
+          cpuCores: 2,
+          runtime: "PANEL_MANAGED",
+          javaImageTag: "mcpanel-runtime:java21",
+        }),
       );
       expect(runtime.start).toHaveBeenCalledWith("container-abc123");
+
+      const row = await prisma.server.findUnique({ where: { id: server.id } });
+      expect(row?.buildVersion).toBeNull();
+      expect(row?.javaImageTag).toBe("mcpanel-runtime:java21");
 
       // server.properties is written by the panel itself before the container
       // ever starts — see the note in DockerMinecraftRuntime.createContainer()
@@ -367,6 +445,90 @@ describe("MinecraftServerManager", () => {
       await manager.deleteServer(server.id as string);
       expect(runtime.remove).not.toHaveBeenCalled();
       expect(prisma.rows.has(server.id as string)).toBe(false);
+    });
+  });
+
+  describe("PANEL_MANAGED-specific behavior", () => {
+    async function createPanelManagedServer(prisma: ReturnType<typeof makeFakePrisma>, extra: Record<string, unknown> = {}) {
+      return prisma.server.create({
+        data: {
+          name: "Attach-based",
+          software: "VANILLA",
+          mcVersion: "1.21.1",
+          containerName: "mcpanel-attach-based-deadbeef",
+          port: 30007,
+          memoryMb: 1024,
+          cpuCores: 1,
+          dataDir: "servers/attach-based",
+          containerId: "container-existing",
+          status: "RUNNING",
+          runtime: "PANEL_MANAGED",
+          javaImageTag: "mcpanel-runtime:java21",
+          installManifest: JSON.stringify({ kind: "direct-download", filename: "server.jar" }),
+          ...extra,
+        },
+      });
+    }
+
+    it("sendCommand writes to the attach session instead of using RCON", async () => {
+      const prisma = makeFakePrisma();
+      const server = await createPanelManagedServer(prisma);
+      const runtime = makeFakeRuntime();
+      const manager = new MinecraftServerManager(prisma as never, runtime);
+
+      const pending = manager.sendCommand(server.id as string, "list");
+      await vi.waitFor(() => {
+        const container = runtime.getContainer("container-existing") as unknown as ReturnType<typeof makeFakeAttachContainer>;
+        expect(container.__stream.write).toHaveBeenCalledWith("list\n");
+      });
+
+      const container = runtime.getContainer("container-existing") as unknown as ReturnType<typeof makeFakeAttachContainer>;
+      container.__stream.emit("data", Buffer.from("There are 1 of a max of 20 players online: Alice\n"));
+      await expect(pending).resolves.toBe("There are 1 of a max of 20 players online: Alice");
+    });
+
+    it("getLogStream returns backlog + live lines from the attach session, not docker logs --follow", async () => {
+      const prisma = makeFakePrisma();
+      const server = await createPanelManagedServer(prisma);
+      const runtime = makeFakeRuntime();
+      const manager = new MinecraftServerManager(prisma as never, runtime);
+
+      const stream = await manager.getLogStream(server.id as string);
+      expect(runtime.getLogStream).not.toHaveBeenCalled();
+
+      const chunks: string[] = [];
+      stream.on("data", (chunk: Buffer) => chunks.push(chunk.toString("utf8")));
+
+      const container = runtime.getContainer("container-existing") as unknown as ReturnType<typeof makeFakeAttachContainer>;
+      container.__stream.emit("data", Buffer.from("hello from the console\n"));
+
+      await vi.waitFor(() => {
+        expect(chunks.join("")).toContain("hello from the console");
+      });
+    });
+
+    it("restartServer reuses the stored javaImageTag (never re-resolves a build) and refreshes the launch script for the current memoryMb", async () => {
+      const prisma = makeFakePrisma();
+      const server = await createPanelManagedServer(prisma, { memoryMb: 4096 });
+      const runtime = makeFakeRuntime();
+      const manager = new MinecraftServerManager(prisma as never, runtime);
+
+      await manager.restartServer(server.id as string);
+
+      expect(installerRefreshLaunchScriptMock).toHaveBeenCalledWith(expect.objectContaining({ memoryMb: 4096 }));
+      expect(runtime.createContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ runtime: "PANEL_MANAGED", javaImageTag: "mcpanel-runtime:java21", memoryMb: 4096 }),
+      );
+      // No env-var/RCON hint resolution for this runtime kind at all.
+      expect(runtime.createContainer).toHaveBeenCalledWith(expect.not.objectContaining({ softwareEnv: expect.anything() }));
+    });
+
+    it("restartServer refuses a PANEL_MANAGED server that somehow has no javaImageTag, rather than guessing", async () => {
+      const prisma = makeFakePrisma();
+      const server = await createPanelManagedServer(prisma, { javaImageTag: null });
+      const manager = new MinecraftServerManager(prisma as never, makeFakeRuntime());
+
+      await expect(manager.restartServer(server.id as string)).rejects.toThrow(/no installed runtime image/i);
     });
   });
 

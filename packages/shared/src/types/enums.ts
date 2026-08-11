@@ -19,6 +19,17 @@ export function pluginTerminologyFor(software: ServerSoftware): "plugin" | "mod"
   return "none";
 }
 
+/**
+ * LEGACY: itzg/docker-minecraft-server image, RCON console, panel-agnostic
+ * install (env-var driven). Frozen forever — existing servers keep running
+ * this way permanently, this code path is never touched by new work.
+ * PANEL_MANAGED: minimal JRE-only image, panel-owned install (direct jar
+ * download or a short-lived installer container), direct stdin/stdout
+ * attach for console. What every server created from now on uses.
+ */
+export const SERVER_RUNTIME = ["LEGACY", "PANEL_MANAGED"] as const;
+export type ServerRuntime = (typeof SERVER_RUNTIME)[number];
+
 export const SERVER_STATUS = [
   "CREATING",
   "INSTALLING",

@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { PassThrough } from "node:stream";
 import { EventEmitter } from "node:events";
 import type { Readable } from "node:stream";
 import type { PrismaClient, Server } from "@prisma/client";
@@ -8,6 +9,7 @@ import type { ServerSoftware, ServerStatus } from "@minecraftpanel/shared";
 import { env } from "../config/env.js";
 import { logger } from "../lib/logger.js";
 import { getDirectorySize } from "../lib/fsUtils.js";
+import { stripAnsi } from "../lib/ansi.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../lib/errors.js";
 import { getProvider, type MinecraftServerProvider } from "./providers/index.js";
 import {
@@ -18,9 +20,14 @@ import {
 } from "./runtime/DockerMinecraftRuntime.js";
 import { RconClient } from "./runtime/RconClient.js";
 import { deriveRconPassword } from "./runtime/rconSecret.js";
+import { AttachConsoleSession } from "./runtime/AttachConsoleSession.js";
+import { ServerInstaller } from "./install/ServerInstaller.js";
 import { ServerConfigService } from "../modules/serverConfig/serverConfig.service.js";
 import type Docker from "dockerode";
 import type { Readable as NodeReadable } from "node:stream";
+
+/** Minecraft's own boot-complete line — printed by the same underlying vanilla DedicatedServer sequence Paper/Fabric/Forge/NeoForge all wrap, so one regex covers all five software types. Always English regardless of locale/motd, since the server console isn't localized. */
+const READY_LINE = /Done \([\d.,]+s\)! For help, type "help"/;
 
 /** The subset of DockerMinecraftRuntime that MinecraftServerManager depends on — extracted so tests can inject a fake without touching a real Docker daemon. */
 export interface MinecraftRuntime {
@@ -32,6 +39,7 @@ export interface MinecraftRuntime {
   inspect(containerId: string): Promise<Docker.ContainerInspectInfo | null>;
   getStats(containerId: string): Promise<ContainerStats | null>;
   getLogStream(containerId: string, options?: { tail?: number; since?: number }): Promise<NodeReadable>;
+  getContainer(containerId: string): Docker.Container;
 }
 
 export interface CreateServerInput {
@@ -87,6 +95,9 @@ export interface MinecraftServerManager {
 export class MinecraftServerManager extends EventEmitter {
   private readonly runtime: MinecraftRuntime;
   private readonly configService = new ServerConfigService();
+  private readonly installer = new ServerInstaller();
+  /** One AttachConsoleSession per PANEL_MANAGED server currently known about — see getOrCreateAttachSession(). */
+  private readonly attachSessions = new Map<string, AttachConsoleSession>();
   private reconcileTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
@@ -137,6 +148,7 @@ export class MinecraftServerManager extends EventEmitter {
         description: input.description,
         software: input.software,
         mcVersion: input.mcVersion,
+        runtime: "PANEL_MANAGED",
         containerName: generateContainerName(input.name),
         port,
         memoryMb: input.memoryMb,
@@ -165,9 +177,7 @@ export class MinecraftServerManager extends EventEmitter {
     if (!server.containerId) throw new ConflictError("Server has no container yet.");
     await this.updateStatus(serverId, "STARTING");
     await this.runtime.start(server.containerId);
-    this.waitUntilRunningOrFailed(serverId, server.containerId).catch((err) =>
-      logger.error({ err, serverId }, "Post-start reconcile failed"),
-    );
+    this.waitUntilReady(server, server.containerId).catch((err) => logger.error({ err, serverId }, "Post-start reconcile failed"));
   }
 
   async stopServer(serverId: string): Promise<void> {
@@ -196,12 +206,39 @@ export class MinecraftServerManager extends EventEmitter {
     await this.recreateContainer(server);
     const updated = await this.requireServer(serverId);
     await this.runtime.start(updated.containerId!);
-    this.waitUntilRunningOrFailed(serverId, updated.containerId!).catch((err) =>
-      logger.error({ err, serverId }, "Post-restart reconcile failed"),
-    );
+    this.waitUntilReady(updated, updated.containerId!).catch((err) => logger.error({ err, serverId }, "Post-restart reconcile failed"));
   }
 
   private async recreateContainer(server: Server): Promise<void> {
+    this.closeAttachSession(server.id); // bound to the old container — a fresh one gets created against the new containerId on next use
+
+    if (server.runtime === "PANEL_MANAGED") {
+      // Reuse exactly what was installed — an ordinary Restart must never
+      // silently roll the server onto a different build (unlike legacy
+      // Paper/Fabric, which re-resolve "latest" via the image on every
+      // recreate). The launch script IS regenerated, though: it bakes in
+      // -Xms/-Xmx from memoryMb, which Settings → Resources may have just
+      // changed, and that must take effect on Restart same as it always
+      // has for the legacy path's MEMORY env var.
+      if (!server.javaImageTag) throw new ConflictError("Server has no installed runtime image to restart with.");
+      await this.installer.refreshLaunchScript(server);
+
+      await this.runtime.remove(server.containerId!, true);
+      const containerId = await this.runtime.createContainer({
+        serverId: server.id,
+        containerName: server.containerName,
+        runtime: "PANEL_MANAGED",
+        mcVersion: server.mcVersion,
+        hostPort: server.port,
+        memoryMb: server.memoryMb,
+        cpuCores: server.cpuCores,
+        eulaAccepted: server.eulaAccepted,
+        javaImageTag: server.javaImageTag,
+      });
+      await this.prisma.server.update({ where: { id: server.id }, data: { containerId } });
+      return;
+    }
+
     const provider = getProvider(server.software as ServerSoftware);
     const softwareEnv = await provider.resolveEnv(server.mcVersion);
     const rconPassword = deriveRconPassword(server.id);
@@ -210,6 +247,7 @@ export class MinecraftServerManager extends EventEmitter {
     const containerId = await this.runtime.createContainer({
       serverId: server.id,
       containerName: server.containerName,
+      runtime: "LEGACY",
       softwareEnv,
       mcVersion: server.mcVersion,
       hostPort: server.port,
@@ -224,6 +262,7 @@ export class MinecraftServerManager extends EventEmitter {
   async deleteServer(serverId: string, options: { keepFiles?: boolean } = {}): Promise<void> {
     const server = await this.requireServer(serverId);
     await this.updateStatus(serverId, "DELETING");
+    this.closeAttachSession(serverId);
 
     if (server.containerId) {
       await this.runtime.remove(server.containerId, true);
@@ -265,6 +304,13 @@ export class MinecraftServerManager extends EventEmitter {
   async getLogStream(serverId: string, options: { tail?: number } = {}): Promise<Readable> {
     const server = await this.requireServer(serverId);
     if (!server.containerId) throw new ConflictError("Server has no container yet.");
+
+    if (server.runtime === "PANEL_MANAGED") {
+      const session = this.getOrCreateAttachSession(server.id, server.containerId);
+      await session.open();
+      return this.attachToReadable(session, options.tail);
+    }
+
     return this.runtime.getLogStream(server.containerId, options);
   }
 
@@ -276,12 +322,34 @@ export class MinecraftServerManager extends EventEmitter {
   async sendCommand(serverId: string, command: string): Promise<string> {
     const server = await this.requireServer(serverId);
     if (server.status !== "RUNNING") throw new ConflictError("Server is not running.");
+
+    if (server.runtime === "PANEL_MANAGED") {
+      if (!server.containerId) throw new ConflictError("Server has no container yet.");
+      const session = this.getOrCreateAttachSession(server.id, server.containerId);
+      await session.open();
+      return session.sendCommand(command);
+    }
+
     const rcon = this.createRconClient(server);
     try {
       return await rcon.send(command);
     } finally {
       rcon.disconnect();
     }
+  }
+
+  /** Adapts an AttachConsoleSession's line feed (backlog + live) into a plain Readable, matching the shape DockerMinecraftRuntime.getLogStream() returns for LEGACY — so ServerLiveSession/PlayerActivityTracker don't need to know which runtime kind they're reading from. */
+  private attachToReadable(session: AttachConsoleSession, tail?: number): Readable {
+    const pass = new PassThrough();
+    const backlog = session.getBacklog();
+    for (const line of tail !== undefined ? backlog.slice(-tail) : backlog) {
+      pass.write(`${line.text}\n`);
+    }
+    const unsubscribe = session.onLine((line) => {
+      if (!pass.destroyed) pass.write(`${line.text}\n`);
+    });
+    pass.once("close", unsubscribe);
+    return pass;
   }
 
   /** Re-derives the resolveEnv() the running container was actually created with — used by installers/plugin logic that need to know the loader family. */
@@ -320,12 +388,44 @@ export class MinecraftServerManager extends EventEmitter {
     // itself afterward. See the note in DockerMinecraftRuntime.createContainer().
     await this.configService.createWithDefaults(server, "server-properties");
 
+    if (server.runtime === "PANEL_MANAGED") {
+      // INSTALLING covers the actual download/verify (or, once Fabric/Forge/
+      // NeoForge land, the ephemeral installer container) — set BEFORE that
+      // work starts, since it's now real, panel-observed work instead of a
+      // label slapped on "container exists, itzg is doing who-knows-what."
+      await this.updateStatus(serverId, "INSTALLING");
+      const plan = await provider.resolveInstallPlan(server.mcVersion);
+      const result = await this.installer.install(server, plan);
+      await this.prisma.server.update({
+        where: { id: serverId },
+        data: { buildVersion: result.buildVersion, javaImageTag: result.javaImageTag, installManifest: result.installManifest },
+      });
+
+      const containerId = await this.runtime.createContainer({
+        serverId: server.id,
+        containerName: server.containerName,
+        runtime: "PANEL_MANAGED",
+        mcVersion: server.mcVersion,
+        hostPort: server.port,
+        memoryMb: server.memoryMb,
+        cpuCores: server.cpuCores,
+        eulaAccepted: server.eulaAccepted,
+        javaImageTag: result.javaImageTag,
+      });
+
+      await this.updateStatus(serverId, "STARTING", { containerId });
+      await this.runtime.start(containerId);
+      await this.waitUntilReady(server, containerId, 15 * 60 * 1000); // modded servers can take a while to install
+      return;
+    }
+
     const softwareEnv = await provider.resolveEnv(server.mcVersion);
     const rconPassword = deriveRconPassword(server.id);
 
     const containerId = await this.runtime.createContainer({
       serverId: server.id,
       containerName: server.containerName,
+      runtime: "LEGACY",
       softwareEnv,
       mcVersion: server.mcVersion,
       hostPort: server.port,
@@ -338,6 +438,76 @@ export class MinecraftServerManager extends EventEmitter {
     await this.updateStatus(serverId, "INSTALLING", { containerId });
     await this.runtime.start(containerId);
     await this.waitUntilRunningOrFailed(serverId, containerId, 15 * 60 * 1000); // modded servers can take a while to install
+  }
+
+  /** Picks the right "wait for ready" strategy per runtime kind — PANEL_MANAGED watches the console for Minecraft's own ready line (accurate); LEGACY falls back to polling Docker's coarse State.Running (all it's ever had, unchanged). */
+  private waitUntilReady(server: Pick<Server, "id" | "runtime">, containerId: string, timeoutMs = 5 * 60 * 1000): Promise<void> {
+    return server.runtime === "PANEL_MANAGED"
+      ? this.waitForReadyLine(server.id, containerId, timeoutMs)
+      : this.waitUntilRunningOrFailed(server.id, containerId, timeoutMs);
+  }
+
+  private async waitForReadyLine(serverId: string, containerId: string, timeoutMs: number): Promise<void> {
+    const session = this.getOrCreateAttachSession(serverId, containerId);
+    try {
+      await session.open();
+    } catch (err) {
+      logger.error({ err, serverId }, "Failed to open console attach session");
+      await this.updateStatus(serverId, "ERROR", { statusDetail: "Failed to open a console connection to the container." });
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      let unsubscribeLine = () => {};
+      let unsubscribeClose = () => {};
+
+      const finish = (fn: () => Promise<void>) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        unsubscribeLine();
+        unsubscribeClose();
+        fn()
+          .catch((err) => logger.error({ err, serverId }, "Failed to update status after waitForReadyLine"))
+          .finally(resolve);
+      };
+
+      const timer = setTimeout(() => {
+        finish(() => this.updateStatus(serverId, "ERROR", { statusDetail: "Timed out waiting for the server to become ready." }));
+      }, timeoutMs);
+
+      unsubscribeLine = session.onLine((line) => {
+        if (READY_LINE.test(stripAnsi(line.text))) {
+          finish(() => this.updateStatus(serverId, "RUNNING"));
+        }
+      });
+
+      unsubscribeClose = session.onClose(() => {
+        finish(async () => {
+          const info = await this.runtime.inspect(containerId);
+          const exitCode = info?.State.ExitCode;
+          const detail = exitCode ? `Container exited with code ${exitCode}.` : null;
+          await this.updateStatus(serverId, detail ? "ERROR" : "STOPPED", { statusDetail: detail });
+        });
+      });
+    });
+  }
+
+  private getOrCreateAttachSession(serverId: string, containerId: string): AttachConsoleSession {
+    let session = this.attachSessions.get(serverId);
+    if (!session) {
+      session = new AttachConsoleSession(this.runtime.getContainer(containerId));
+      this.attachSessions.set(serverId, session);
+    }
+    return session;
+  }
+
+  private closeAttachSession(serverId: string): void {
+    const session = this.attachSessions.get(serverId);
+    if (!session) return;
+    this.attachSessions.delete(serverId);
+    session.close();
   }
 
   private async waitUntilRunningOrFailed(serverId: string, containerId: string, timeoutMs = 5 * 60 * 1000): Promise<void> {

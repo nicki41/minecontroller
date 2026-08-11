@@ -1,4 +1,4 @@
-import type { AccessLevel, ServerSoftware, ServerStatus } from "./enums.js";
+import type { AccessLevel, ServerRuntime, ServerSoftware, ServerStatus } from "./enums.js";
 
 export interface ServerDto {
   id: string;
@@ -6,6 +6,8 @@ export interface ServerDto {
   description: string | null;
   software: ServerSoftware;
   mcVersion: string;
+  /** LEGACY (itzg image, RCON) vs PANEL_MANAGED (panel-owned install, direct console attach). Fixed at creation, never changes. */
+  runtime: ServerRuntime;
   status: ServerStatus;
   statusDetail: string | null;
   port: number;
