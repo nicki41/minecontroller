@@ -2,7 +2,6 @@ import type { Readable } from "node:stream";
 import type { WebSocket } from "ws";
 import type { ConsoleLineDto, ServerStatus, ServerWsServerMessage } from "@minecraftpanel/shared";
 import { logger } from "../lib/logger.js";
-import { stripAnsi } from "../lib/ansi.js";
 import type { MinecraftServerManager } from "../minecraft/MinecraftServerManager.js";
 
 const MAX_BUFFERED_LINES = 1000;
@@ -103,7 +102,10 @@ export class ServerLiveSession {
   }
 
   private handleLogChunk(chunk: Buffer): void {
-    const text = stripAnsi(chunk.toString("utf8"));
+    // ANSI intact — the browser renders colors itself now (ansiToSpans.ts).
+    // Only PlayerActivityTracker still strips ANSI, since its join/leave/
+    // UUID regexes need plain text to match against.
+    const text = chunk.toString("utf8");
     for (const rawLine of text.split(/\r?\n/)) {
       if (rawLine.length === 0) continue;
       this.pushLine(rawLine);

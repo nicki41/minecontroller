@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { ansiToSpans, stripAnsiCodes } from "@/lib/ansiToSpans";
 import { useServerLive } from "./ServerLiveContext";
 import { useServerOutletContext } from "./useServerOutletContext";
 
@@ -27,7 +28,7 @@ export default function ServerConsolePage() {
   const filtered = useMemo(() => {
     if (!search.trim()) return lines;
     const needle = search.toLowerCase();
-    return lines.filter((l) => l.text.toLowerCase().includes(needle));
+    return lines.filter((l) => stripAnsiCodes(l.text).toLowerCase().includes(needle));
   }, [lines, search]);
 
   useEffect(() => {
@@ -105,7 +106,11 @@ export default function ServerConsolePage() {
         {filtered.length === 0 && <p className="py-8 text-center text-muted-foreground">No console output yet.</p>}
         {filtered.map((line) => (
           <div key={line.id} className={cn("whitespace-pre-wrap break-all py-0.5", line.text.startsWith("> ") && "text-primary")}>
-            {line.text}
+            {ansiToSpans(line.text).map((span, i) => (
+              <span key={i} className={span.className}>
+                {span.text}
+              </span>
+            ))}
           </div>
         ))}
 
@@ -128,7 +133,7 @@ export default function ServerConsolePage() {
           onChange={(e) => setCommand(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={!canExecute}
-          placeholder={canExecute ? "whitelist add Steve" : "You don't have permission to run commands"}
+          placeholder={canExecute ? "Enter a command..." : "You don't have permission to run commands"}
           className="h-8 flex-1 font-mono text-xs"
           autoComplete="off"
         />
