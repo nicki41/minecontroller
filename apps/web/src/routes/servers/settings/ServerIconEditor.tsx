@@ -3,40 +3,40 @@ import { toast } from "sonner";
 import { ImageOff, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { resizeToServerIcon, serverIconUrl, useDeleteServerIcon, useUploadServerIcon } from "@/lib/serverIcon";
+import { serverIconUrl, useDeleteServerIcon, useServerIconVersion, useUploadServerIcon } from "@/lib/serverIcon";
 import { ApiError } from "@/lib/api";
+import { ServerIconCropDialog } from "./ServerIconCropDialog";
 
 export function ServerIconEditor({ serverId, canEdit }: { serverId: string; canEdit: boolean }) {
-  const [version, setVersion] = useState(0);
+  const { version, bump } = useServerIconVersion(serverId);
   const [hasIcon, setHasIcon] = useState<boolean | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const upload = useUploadServerIcon(serverId);
   const remove = useDeleteServerIcon(serverId);
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
-    if (!file) return;
+    if (file) setPendingFile(file);
+  }
 
-    setUploading(true);
+  async function handleCropConfirm(icon: Blob) {
     try {
-      const icon = await resizeToServerIcon(file);
       await upload.mutateAsync(icon);
-      setVersion((v) => v + 1);
+      bump();
       setHasIcon(true);
+      setPendingFile(null);
       toast.success("Server icon updated. Restart the server to show it in the multiplayer list.");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed to upload the icon. Make sure it's an image file.");
-    } finally {
-      setUploading(false);
     }
   }
 
   async function handleRemove() {
     try {
       await remove.mutateAsync();
-      setVersion((v) => v + 1);
+      bump();
       setHasIcon(false);
       toast.success("Server icon removed.");
     } catch (err) {
@@ -62,12 +62,12 @@ export function ServerIconEditor({ serverId, canEdit }: { serverId: string; canE
 
       <div className="space-y-1.5">
         <Label>Server icon</Label>
-        <p className="text-xs text-muted-foreground">Shown next to the MOTD in the multiplayer server list. Any image works — it&apos;s auto-cropped and resized to 64×64.</p>
+        <p className="text-xs text-muted-foreground">Shown next to the MOTD in the multiplayer server list. Any image works — crop it to a square below.</p>
         {canEdit && (
           <div className="flex items-center gap-2 pt-0.5">
-            <Button type="button" variant="outline" size="sm" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
+            <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
               <Upload className="h-3.5 w-3.5" />
-              {uploading ? "Uploading..." : "Upload"}
+              Upload
             </Button>
             {hasIcon && (
               <Button type="button" variant="ghost" size="sm" disabled={remove.isPending} onClick={handleRemove}>
@@ -79,6 +79,13 @@ export function ServerIconEditor({ serverId, canEdit }: { serverId: string; canE
           </div>
         )}
       </div>
+
+      <ServerIconCropDialog
+        file={pendingFile}
+        uploading={upload.isPending}
+        onCancel={() => setPendingFile(null)}
+        onConfirm={handleCropConfirm}
+      />
     </div>
   );
 }

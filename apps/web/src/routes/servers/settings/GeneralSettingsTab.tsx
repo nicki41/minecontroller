@@ -14,6 +14,7 @@ import { useServerConfigFile, useUpdateServerConfigFile } from "@/lib/serverConf
 import { ApiError } from "@/lib/api";
 import { ServerIconEditor } from "./ServerIconEditor";
 import { MotdEditor } from "./MotdEditor";
+import { ServerListPreview } from "./ServerListPreview";
 import { RestartConfirmDialog } from "./RestartConfirmDialog";
 
 type GeneralInput = Pick<UpdateServerSettingsInput, "name" | "description">;
@@ -116,6 +117,7 @@ function ServerListCard({ server, canEdit }: { server: ServerDto; canEdit: boole
                   disabled={!canEdit}
                 />
               </FormField>
+              <ServerListPreview serverId={server.id} name={server.name} motd={motd} maxPlayers={maxPlayers} />
             </>
           )}
         </CardContent>
