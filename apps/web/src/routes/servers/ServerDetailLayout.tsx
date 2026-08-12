@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Outlet, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Play, Square, RotateCw, Box, Radio, Clock, Users } from "lucide-react";
@@ -10,6 +11,7 @@ import { useServer, useServerAction, useServerStats } from "@/lib/servers";
 import { useServerConfigFile } from "@/lib/serverConfig";
 import { usePlayers } from "@/lib/players";
 import { usePublicIp } from "@/lib/system";
+import { serverIconUrl, useServerIconVersion } from "@/lib/serverIcon";
 import { formatUptime } from "@/lib/uptime";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -20,6 +22,8 @@ export default function ServerDetailLayout() {
   const { hasPermission } = useAuth();
   const { data, isLoading } = useServer(id);
   const server = data?.server;
+  const [hasIcon, setHasIcon] = useState<boolean | null>(null);
+  const { version: iconVersion } = useServerIconVersion(id!);
 
   const start = useServerAction(id!, "start");
   const stop = useServerAction(id!, "stop");
@@ -64,9 +68,24 @@ export default function ServerDetailLayout() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4 rounded-lg border border-border bg-card p-4">
         <div className="min-w-0 space-y-2">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="truncate text-2xl font-semibold tracking-tight">{server.name}</h1>
-            <StatusLabel status={server.status} />
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/40">
+              {hasIcon !== false && (
+                <img
+                  key={iconVersion}
+                  src={serverIconUrl(server.id, iconVersion)}
+                  alt=""
+                  className="h-full w-full [image-rendering:pixelated]"
+                  onLoad={() => setHasIcon(true)}
+                  onError={() => setHasIcon(false)}
+                />
+              )}
+              {hasIcon === false && <Box className="h-5 w-5 text-muted-foreground" />}
+            </div>
+            <div className="min-w-0">
+              <h1 className="truncate text-2xl font-semibold tracking-tight">{server.name}</h1>
+              <StatusLabel status={server.status} />
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant="secondary" className="gap-1">
