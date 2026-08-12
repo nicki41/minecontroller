@@ -1,0 +1,12 @@
+# Local-build overlay for contributors — builds the api image from source
+# instead of pulling it from GHCR. Use alongside the base file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+#
+# End users deploying the panel don't need this file at all.
+services:
+  api:
+    image: minecontroller-api:dev
+    build:
+      context: .
+      dockerfile: Dockerfile

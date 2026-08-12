@@ -28,10 +28,11 @@ For offsite protection, periodically back up the whole `data/` folder externally
 ## Updates
 
 ```bash
-git pull
-docker compose build api
+docker compose pull
 docker compose up -d
 ```
+
+That's it — no `git clone`/`git pull` needed for a normal deployment, since `docker-compose.yml` and `.env` are the only files a deployment actually needs, and `api` is pulled pre-built from GHCR. (Building from source instead, e.g. for local development? See [CONTRIBUTING.md](../CONTRIBUTING.md).)
 
 Database migrations are applied automatically when the api container starts, via `prisma migrate deploy` (see [`docker/entrypoint.sh`](../docker/entrypoint.sh)) — no manual migration step needed. Running Minecraft server containers are unaffected by a panel update, since they're independent containers.
 
@@ -47,7 +48,7 @@ sudo chown -R 1000:1000 ./data
 Usually a misconfigured `HOST_DATA_PATH` — see [configuration.md](configuration.md#host_data_path-the-sibling-container-problem). Check with `docker inspect <container>` and confirm the `Binds` entry points at a host path that actually exists.
 
 **Server creation fails with "Provisioning failed unexpectedly", logs show `EACCES /var/run/docker.sock`**
-The `node` user inside the container didn't have access to the host-mounted Docker socket, because the socket's group GID on the host didn't match the container's GID. The entrypoint script now detects the socket's actual GID at startup and adds `node` to a matching group automatically (see `docker/entrypoint.sh`) — no manual action needed. If it still happens, rebuild the container (`docker compose build api`) — an old image predates this fix.
+The `node` user inside the container didn't have access to the host-mounted Docker socket, because the socket's group GID on the host didn't match the container's GID. The entrypoint script detects the socket's actual GID at startup and adds `node` to a matching group automatically (see `docker/entrypoint.sh`) — no manual action needed. If it still happens, pull the latest image (`docker compose pull api && docker compose up -d`) — an old image may predate this fix.
 
 **Server creation fails with "Port already used"**
 The chosen or auto-assigned port is already taken by another server, or `MC_PORT_RANGE_MIN`/`MAX` is too narrow for the number of servers you're running.

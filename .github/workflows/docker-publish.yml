@@ -1,0 +1,92 @@
+name: Publish Docker images
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*.*.*"]
+  workflow_dispatch: {}
+
+env:
+  REGISTRY: ghcr.io
+  API_IMAGE: ghcr.io/${{ github.repository_owner }}/minecontroller
+  RUNTIME_IMAGE: ghcr.io/${{ github.repository_owner }}/minecontroller-runtime
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.API_IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=sha,prefix=
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+  # Base images for panel-managed Minecraft servers (see
+  # apps/api/src/minecraft/runtime/runtimeImages.ts) — one per supported
+  # Java major. Add a matrix entry here whenever a new one is added there.
+  runtime-images:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        java: [8, 17, 21, 25]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.RUNTIME_IMAGE }}
+          tags: |
+            type=raw,value=java${{ matrix.java }},enable={{is_default_branch}}
+            type=raw,value=java${{ matrix.java }}-{{sha}}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./runtime-images
+          file: ./runtime-images/java${{ matrix.java }}/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=runtime-java${{ matrix.java }}
+          cache-to: type=gha,mode=max,scope=runtime-java${{ matrix.java }}

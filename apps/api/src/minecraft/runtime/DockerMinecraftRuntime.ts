@@ -2,6 +2,7 @@ import type { Readable } from "node:stream";
 import Docker from "dockerode";
 import type { ServerRuntime } from "@minecraftpanel/shared";
 import { env } from "../../config/env.js";
+import { resolveHostDataPath } from "../../config/hostDataPath.js";
 import { logger } from "../../lib/logger.js";
 
 export const CONTAINER_GAME_PORT = 25565;
@@ -77,32 +78,14 @@ export class DockerMinecraftRuntime {
     logger.info({ image }, "Image pull complete.");
   }
 
-  /**
-   * Unlike ensureImage()/env.MINECRAFT_IMAGE (a public image, pulled from a
-   * registry on first use), the runtime-images/* tags are built locally and
-   * never published anywhere — there's nothing to pull. A 404 here means
-   * the operator genuinely needs to build them first, so this fails with an
-   * actionable message instead of attempting (and confusingly failing) a
-   * registry pull.
-   */
-  private async ensureLocalImage(image: string): Promise<void> {
-    try {
-      await this.docker.getImage(image).inspect();
-    } catch (err) {
-      if (isDockerStatus(err, 404)) {
-        throw new Error(`Runtime image "${image}" is not built locally yet — build the images in runtime-images/ first.`);
-      }
-      throw err;
-    }
-  }
-
   async createContainer(options: CreateContainerOptions): Promise<string> {
     await this.ensureNetwork();
 
     // Always forward-slash: this string is interpreted by the Docker
     // daemon (always Linux, even under Docker Desktop), never by the API
     // process's own OS — see README "Docker socket & host paths".
-    const hostDataDir = `${env.HOST_DATA_PATH.replace(/\/+$/, "")}/servers/${options.serverId}`;
+    const hostDataPath = await resolveHostDataPath();
+    const hostDataDir = `${hostDataPath.replace(/\/+$/, "")}/servers/${options.serverId}`;
     const sharedHostConfig = {
       Memory: options.memoryMb * 1024 * 1024,
       MemorySwap: options.memoryMb * 1024 * 1024, // no swap beyond the memory limit
@@ -117,7 +100,7 @@ export class DockerMinecraftRuntime {
     if (options.runtime === "PANEL_MANAGED") {
       const image = options.javaImageTag;
       if (!image) throw new Error("javaImageTag is required for a PANEL_MANAGED container.");
-      await this.ensureLocalImage(image);
+      await this.ensureImage(image);
 
       const container = await this.docker.createContainer({
         name: options.containerName,

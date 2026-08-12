@@ -14,6 +14,8 @@ npm run dev
 
 `npm run dev` starts `packages/shared` in watch mode, the API (`tsx watch`), and the Vite frontend dev server, all in parallel. The frontend runs on its own Vite port and proxies API requests to the locally running API.
 
+**Testing Minecraft server creation locally**: `HOST_DATA_PATH`'s normal auto-detection (see [docs/configuration.md](configuration.md#host_data_path-the-sibling-container-problem)) only works when the API itself is running *as* a Docker container — it self-inspects its own mounts. Running the API directly via `npm run dev` instead, you're not a container at all, so set `HOST_DATA_PATH` explicitly in `.env` to the absolute path of this repo's `data/` folder before exercising anything that creates a real Minecraft server container.
+
 ## Scripts
 
 Run from the repo root — these operate across all workspaces:

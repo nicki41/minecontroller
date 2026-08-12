@@ -56,6 +56,13 @@ export async function resolveJavaMajor(mcVersion: string, userAgent: string): Pr
   return detail?.javaVersion?.majorVersion ?? LEGACY_JAVA_MAJOR;
 }
 
+// Published by .github/workflows/docker-publish.yml (multi-arch, from
+// runtime-images/javaXX/Dockerfile) so a fresh install just pulls these —
+// no local build step required. Override the registry/repo prefix via
+// RUNTIME_IMAGE_BASE (e.g. for a fork publishing under a different owner,
+// or a local dev build tagged the same way).
+const RUNTIME_IMAGE_BASE = process.env.RUNTIME_IMAGE_BASE ?? "ghcr.io/nicki41/minecontroller-runtime";
+
 // Covers the full range of Java majors real Minecraft versions currently
 // need: 8 for ~pre-1.17 (LEGACY_JAVA_MAJOR fallback), 17 for ~1.18-1.20.4,
 // 21 for ~1.20.5 through the last "1.21.x"-numbered release, and 25 from
@@ -63,13 +70,14 @@ export async function resolveJavaMajor(mcVersion: string, userAgent: string): Pr
 // — 26.1 was the first release to require it). Mojang bumps this
 // periodically; when a version needs a Java major higher than anything
 // here, resolveRuntimeImageTag() throws a clear, actionable error instead
-// of silently guessing — add the new tag here (and build the matching
-// runtime-images/javaXX/ image) rather than widening an existing entry.
+// of silently guessing — add the new tag here (and the matching
+// runtime-images/javaXX/ image + CI matrix entry) rather than widening an
+// existing entry.
 const AVAILABLE_JAVA_TAGS: { javaMajor: number; image: string }[] = [
-  { javaMajor: 8, image: "mcpanel-runtime:java8" },
-  { javaMajor: 17, image: "mcpanel-runtime:java17" },
-  { javaMajor: 21, image: "mcpanel-runtime:java21" },
-  { javaMajor: 25, image: "mcpanel-runtime:java25" },
+  { javaMajor: 8, image: `${RUNTIME_IMAGE_BASE}:java8` },
+  { javaMajor: 17, image: `${RUNTIME_IMAGE_BASE}:java17` },
+  { javaMajor: 21, image: `${RUNTIME_IMAGE_BASE}:java21` },
+  { javaMajor: 25, image: `${RUNTIME_IMAGE_BASE}:java25` },
 ];
 
 /** Picks the smallest available runtime image tag whose Java major is >= what the version needs. */

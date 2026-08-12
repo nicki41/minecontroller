@@ -3,6 +3,11 @@
   "private": true,
   "version": "0.1.0",
   "description": "Self-hosted Minecraft server management panel",
+  "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nicki41/minecontroller.git"
+  },
   "workspaces": [
     "apps/*",
     "packages/*"

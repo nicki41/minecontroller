@@ -1,8 +1,10 @@
 services:
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # Pulled from GitHub Container Registry — published automatically by
+    # .github/workflows/docker-publish.yml on every push to main. No local
+    # build needed for a normal deployment. Contributing/local-dev builds
+    # from source instead via docker-compose.dev.yml — see docs/development.md.
+    image: ${MINECRAFTPANEL_IMAGE:-ghcr.io/nicki41/minecontroller:latest}
     container_name: minecraftpanel-api
     restart: unless-stopped
     environment:
@@ -17,28 +19,36 @@ services:
       SESSION_SECRET: ${SESSION_SECRET}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
       DOCKER_SOCKET_PATH: /var/run/docker.sock
-      HOST_DATA_PATH: ${HOST_DATA_PATH}
+      # Not set here: HOST_DATA_PATH is auto-detected at runtime by
+      # self-inspecting this container's own mounts over the Docker socket
+      # (see apps/api/src/config/hostDataPath.ts). Only add it below if
+      # that detection doesn't work for your setup (rootless Docker,
+      # Podman, ...) — see docs/configuration.md.
+      # HOST_DATA_PATH: /absolute/path/to/minecontroller/data
       DATA_PATH: /data
       MINECRAFT_IMAGE: ${MINECRAFT_IMAGE:-itzg/minecraft-server:latest}
+      RUNTIME_IMAGE_BASE: ${RUNTIME_IMAGE_BASE:-ghcr.io/nicki41/minecontroller-runtime}
       MINECRAFT_NETWORK: ${MINECRAFT_NETWORK:-minecraftpanel_mc_net}
       MC_PORT_RANGE_MIN: ${MC_PORT_RANGE_MIN:-25565}
       MC_PORT_RANGE_MAX: ${MC_PORT_RANGE_MAX:-25664}
       MODRINTH_API_URL: ${MODRINTH_API_URL:-https://api.modrinth.com/v2}
       MODRINTH_USER_AGENT: ${MODRINTH_USER_AGENT:-minecraftpanel/0.1.0}
-    # No published host port by default: reached via proxy_net (see the
-    # network entry below) with a reverse proxy in front, e.g.
-    # nginx-proxy-manager pointed at "minecraftpanel-api" : 3000 — enable
-    # its "Websockets Support" toggle, the live console needs it.
-    # No reverse proxy? Uncomment to expose the panel directly instead:
-    # ports:
-    #   - "${PANEL_PORT:-3000}:3000"
+    # Published directly on the host by default — this is all that's
+    # needed to reach the panel at http://<host>:3000. Already behind a
+    # reverse proxy (nginx-proxy-manager, Caddy, Traefik, ...)? Comment
+    # this out, uncomment the "proxy_net" lines below (in both "networks:"
+    # blocks) and point the proxy at "minecraftpanel-api" : 3000 instead —
+    # enable its "Websockets Support" toggle, the live console needs it.
+    ports:
+      - "${PANEL_PORT:-3000}:3000"
     volumes:
       # Server files, uploads, backups, AND the sqlite database itself
       # (db.sqlite, at the top level of this folder) — the whole panel's
       # state lives in this one bind mount. Bind-mounted (not a named
-      # volume) so HOST_DATA_PATH below can reliably point the Docker
-      # daemon at the same folder when the API asks it to bind-mount
-      # per-server data into newly created Minecraft containers (see README).
+      # volume) so the API's own self-detection (see HOST_DATA_PATH above)
+      # can reliably resolve the matching host path when it asks the
+      # Docker daemon to bind-mount per-server data into newly created
+      # Minecraft containers (see README).
       - ./data:/data
       # Grants the API container control over the host's Docker daemon so it
       # can create/start/stop/inspect Minecraft server containers. This is
@@ -52,10 +62,11 @@ services:
       # RCON to the host. See DockerMinecraftRuntime / RconClient.
       - minecraftpanel_mc_net
       # Reverse-proxy network (e.g. nginx-proxy-manager) — lets that
-      # container reach this one by name. Not needed if you uncommented
-      # "ports:" above for direct access instead; remove this line and the
-      # proxy_net entry under top-level networks if you don't have one.
-      - proxy_net
+      # container reach this one by name. Only needed if you commented out
+      # "ports:" above; uncomment this together with the proxy_net entry
+      # under top-level "networks:" below, and make sure that network
+      # already exists on your host (docker network ls).
+      # - proxy_net
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
@@ -70,7 +81,9 @@ networks:
   minecraftpanel_mc_net:
     name: ${MINECRAFT_NETWORK:-minecraftpanel_mc_net}
     driver: bridge
-  # Managed by the existing nginx-proxy-manager stack, not by minecraftpanel
-  # — must already exist (it does: created alongside nginx-proxy-manager).
-  proxy_net:
-    external: true
+  # Uncomment together with the "api" service's "proxy_net" entry above if
+  # you're putting a reverse proxy in front instead of publishing the port
+  # directly. Must already exist on the host (e.g. created alongside your
+  # nginx-proxy-manager/Traefik/Caddy stack) — this only references it.
+  # proxy_net:
+  #   external: true

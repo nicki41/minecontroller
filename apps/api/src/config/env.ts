@@ -28,13 +28,19 @@ const envSchema = z
       .transform((v) => v !== "false"),
 
     DOCKER_SOCKET_PATH: z.string().default("/var/run/docker.sock"),
+    // Optional on purpose: normally auto-detected at runtime by
+    // resolveHostDataPath() (self-inspecting this container's own mounts
+    // over the Docker socket) — see apps/api/src/config/hostDataPath.ts.
+    // Only set this explicitly for setups where that detection can't work
+    // (rootless Docker, Podman, a renamed hostname, ...).
     HOST_DATA_PATH: z
       .string()
-      .min(1, "HOST_DATA_PATH is required — see .env.example")
+      .min(1)
       .refine((p) => p !== "." && !p.startsWith("./") && !p.startsWith("../"), {
         message:
-          "HOST_DATA_PATH must be an absolute path as seen by the Docker host, not a relative one — see README 'Docker socket & host paths'",
-      }),
+          "HOST_DATA_PATH must be an absolute path as seen by the Docker host, not a relative one — see docs/configuration.md",
+      })
+      .optional(),
     DATA_PATH: z.string().default("/data"),
     MINECRAFT_IMAGE: z.string().default("itzg/minecraft-server:latest"),
     MINECRAFT_NETWORK: z.string().default("minecraftpanel_mc_net"),
