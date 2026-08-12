@@ -14,12 +14,6 @@ const buttonVariants = cva(
         secondary: "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
-        /** Positive/active action (e.g. Start server) — status-online tint, same weight as `default`. */
-        success: "bg-status-online text-white shadow hover:bg-status-online/90",
-        /** Caution-toned action (e.g. Restart, Pause) — outline tinted with status-starting instead of a solid fill. */
-        warning: "border border-status-starting/40 bg-status-starting/10 text-status-starting shadow-sm hover:bg-status-starting/20",
-        /** Stop-toned action, distinct from `destructive` (irreversible) — outline tinted with status-stopping. */
-        stop: "border border-status-stopping/40 bg-status-stopping/10 text-status-stopping shadow-sm hover:bg-status-stopping/20",
       },
       size: {
         default: "h-9 px-4 py-2",

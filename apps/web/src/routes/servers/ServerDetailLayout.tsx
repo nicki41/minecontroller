@@ -90,15 +90,20 @@ export default function ServerDetailLayout() {
         {canFull && (
           <div className="flex items-center gap-2">
             {showStop ? (
-              <Button size="sm" variant="stop" disabled={!canStop || busy} onClick={() => run(stop, "stop")}>
+              <Button size="sm" variant="outline" disabled={!canStop || busy} onClick={() => run(stop, "stop")}>
                 <Square /> Stop
               </Button>
             ) : (
-              <Button size="sm" variant="success" disabled={!canStart || busy} onClick={() => run(start, "start")}>
+              <Button size="sm" variant="default" disabled={!canStart || busy} onClick={() => run(start, "start")}>
                 <Play /> Start
               </Button>
             )}
-            <Button size="sm" variant="warning" disabled={!canRestart || busy} onClick={() => run(restart, "restart")}>
+            <Button
+              size="sm"
+              variant={showStop ? "default" : "outline"}
+              disabled={!canRestart || busy}
+              onClick={() => run(restart, "restart")}
+            >
               <RotateCw /> Restart
             </Button>
           </div>
