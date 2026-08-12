@@ -16,6 +16,7 @@ import ServerFilesPage from "@/routes/servers/ServerFilesPage";
 import ServerPluginsPage from "@/routes/servers/ServerPluginsPage";
 import ServerPlayersPage from "@/routes/servers/ServerPlayersPage";
 import ServerBackupsPage from "@/routes/servers/ServerBackupsPage";
+import ServerSchedulerPage from "@/routes/servers/ServerSchedulerPage";
 import ServerSettingsPage from "@/routes/servers/ServerSettingsPage";
 import ModrinthBrowsePage from "@/routes/modrinth/ModrinthBrowsePage";
 import UsersPage from "@/routes/admin/UsersPage";
@@ -60,6 +61,7 @@ export default function App() {
               <Route path="plugins" element={<ServerPluginsPage />} />
               <Route path="players" element={<ServerPlayersPage />} />
               <Route path="backups" element={<ServerBackupsPage />} />
+              <Route path="scheduler" element={<ServerSchedulerPage />} />
               <Route path="settings" element={<ServerSettingsPage />} />
             </Route>
 

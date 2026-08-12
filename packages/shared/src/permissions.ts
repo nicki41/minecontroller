@@ -35,6 +35,9 @@ export const PERMISSIONS = [
   "backups.restore",
   "backups.delete",
 
+  "scheduler.view",
+  "scheduler.manage",
+
   "users.view",
   "users.create",
   "users.edit",
@@ -102,6 +105,8 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<Exclude<SystemRoleName, "Owner">, P
     "backups.create",
     "backups.restore",
     "backups.delete",
+    "scheduler.view",
+    "scheduler.manage",
   ],
   // Player management and console access only.
   Moderator: [
@@ -116,10 +121,26 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<Exclude<SystemRoleName, "Owner">, P
     "players.message",
   ],
   // Read-only across the board.
-  Viewer: ["servers.view", "console.view", "files.view", "players.view", "plugins.view", "backups.view"],
+  Viewer: [
+    "servers.view",
+    "console.view",
+    "files.view",
+    "players.view",
+    "plugins.view",
+    "backups.view",
+    "scheduler.view",
+  ],
 };
 
-const SERVER_SCOPED_PREFIXES = ["servers.", "console.", "files.", "players.", "plugins.", "backups."] as const;
+const SERVER_SCOPED_PREFIXES = [
+  "servers.",
+  "console.",
+  "files.",
+  "players.",
+  "plugins.",
+  "backups.",
+  "scheduler.",
+] as const;
 
 /** Permissions that apply to a specific server rather than the instance globally. */
 export function isServerScopedPermission(permission: Permission): boolean {
@@ -133,6 +154,7 @@ const VIEW_ONLY_SURVIVORS: ReadonlySet<Permission> = new Set([
   "players.view",
   "plugins.view",
   "backups.view",
+  "scheduler.view",
 ]);
 
 /**

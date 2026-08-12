@@ -19,8 +19,6 @@ export function serializeServer(server: Server, myAccessLevel: AccessLevel): Ser
     memoryMb: server.memoryMb,
     cpuCores: server.cpuCores,
     diskLimitMb: server.diskLimitMb,
-    autoRestartEnabled: server.autoRestartEnabled,
-    restartCron: server.restartCron,
     eulaAccepted: server.eulaAccepted,
     createdAt: server.createdAt.toISOString(),
     updatedAt: server.updatedAt.toISOString(),

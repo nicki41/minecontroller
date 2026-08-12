@@ -17,6 +17,7 @@ import errorHandlerPlugin from "./plugins/error-handler.js";
 import auditPlugin from "./plugins/audit.js";
 import authPlugin from "./plugins/auth.js";
 import minecraftPlugin from "./plugins/minecraft.js";
+import schedulerPlugin from "./plugins/scheduler.js";
 import liveSessionsPlugin from "./plugins/liveSessions.js";
 import metricsHistoryPlugin from "./plugins/metricsHistory.js";
 import playerActivityPlugin from "./plugins/playerActivity.js";
@@ -90,6 +91,7 @@ export async function buildApp() {
   await app.register(auditPlugin);
   await app.register(authPlugin);
   await app.register(minecraftPlugin);
+  await app.register(schedulerPlugin);
   await app.register(liveSessionsPlugin);
   await app.register(metricsHistoryPlugin);
   await app.register(playerActivityPlugin);

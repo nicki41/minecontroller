@@ -16,6 +16,7 @@ import {
   UsersRound,
   SlidersHorizontal,
   Archive,
+  CalendarClock,
 } from "lucide-react";
 import type { Permission } from "@minecraftpanel/shared";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,7 @@ const SERVER_NAV_ITEMS = [
   { to: "plugins", label: "Plugins/Mods", icon: Blocks },
   { to: "players", label: "Players", icon: UsersRound },
   { to: "backups", label: "Backups", icon: Archive },
+  { to: "scheduler", label: "Scheduler", icon: CalendarClock },
   { to: "settings", label: "Settings", icon: SlidersHorizontal },
 ];
 

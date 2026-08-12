@@ -66,8 +66,6 @@ function makeServer(overrides: Partial<Server> = {}): Server {
     status: "RUNNING",
     statusDetail: null,
     dataDir: "server1",
-    autoRestartEnabled: false,
-    restartCron: null,
     eulaAccepted: true,
     createdAt: new Date(),
     updatedAt: new Date(),

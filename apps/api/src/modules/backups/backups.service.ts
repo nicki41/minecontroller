@@ -52,7 +52,7 @@ export class BackupService {
     return backups.map(serialize);
   }
 
-  async create(server: Server, note: string | undefined, createdById: string): Promise<BackupDto> {
+  async create(server: Server, note: string | undefined, createdById: string | undefined): Promise<BackupDto> {
     const dir = backupsDirFor(server.id);
     await fs.mkdir(dir, { recursive: true });
 

@@ -35,6 +35,7 @@ model User {
   recoveryCodes      RecoveryCode[]
   playerBansCreated  PlayerBan[]    @relation("PlayerBanCreatedBy")
   playerBansRevoked  PlayerBan[]    @relation("PlayerBanRevokedBy")
+  schedulerWorkflowsCreated SchedulerWorkflow[]
 
   @@index([email])
 }
@@ -185,9 +186,6 @@ model Server {
   /// directly (see ServerConfigService + configSchemas/serverProperties.ts)
   /// as the single source of truth; it's created with defaults at
   /// provisioning time and edited in place from then on.
-  autoRestartEnabled  Boolean @default(false)
-  restartCron         String?
-
   /// Must be explicitly set true by the user at creation time (checkbox in the
   /// creation wizard) before the container is ever created with EULA=TRUE.
   /// Defaults to false so any code path that forgets to pass it never
@@ -206,6 +204,7 @@ model Server {
   playerNameHistory PlayerNameHistory[]
   playerIpHistory  PlayerIpHistory[]
   playerBans       PlayerBan[]
+  schedulerWorkflows SchedulerWorkflow[]
 
   @@index([status])
 }
@@ -373,6 +372,66 @@ model Backup {
   createdBy User?  @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([serverId])
+}
+
+// ------------------------------------------------------------------
+// Scheduler — user-defined workflows (ordered action steps, each with an
+// optional delay before the next) that fire on a cron schedule. See
+// SchedulerService for execution; Server.autoRestartEnabled/restartCron
+// used to be a stub for this and were removed in favor of it.
+// ------------------------------------------------------------------
+
+model SchedulerWorkflow {
+  id          String   @id @default(cuid())
+  serverId    String
+  name        String
+  /// Standard 5-field cron expression (minute hour day month weekday), evaluated in server-local time.
+  cronExpr    String
+  enabled     Boolean  @default(true)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastRunAt   DateTime?
+  nextRunAt   DateTime?
+
+  server    Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  steps     SchedulerStep[]
+  runs      SchedulerRun[]
+
+  @@index([serverId])
+}
+
+model SchedulerStep {
+  id            String @id @default(cuid())
+  workflowId    String
+  order         Int
+  /// SchedulerStepType union (COMMAND/START/STOP/RESTART/BACKUP) — see packages/shared.
+  type          String
+  /// Command text for COMMAND steps, optional note for BACKUP steps; null otherwise.
+  payload       String?
+  /// Seconds to wait AFTER this step completes before running the next one.
+  delayAfterSec Int    @default(0)
+
+  workflow SchedulerWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
+  @@unique([workflowId, order])
+}
+
+model SchedulerRun {
+  id         String    @id @default(cuid())
+  workflowId String
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  /// SchedulerRunStatus union (RUNNING/SUCCESS/FAILED) — see packages/shared.
+  status     String
+  /// JSON-stringified array of {stepId, type, ok, message, at} — same convention as AuditLog.details.
+  log        String?
+
+  workflow SchedulerWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
 }
 
 // ------------------------------------------------------------------

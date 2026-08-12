@@ -57,6 +57,10 @@ export const AuditAction = {
   BACKUP_CREATE: "backup.create",
   BACKUP_RESTORE: "backup.restore",
   BACKUP_DELETE: "backup.delete",
+  SCHEDULER_WORKFLOW_CREATE: "scheduler.workflow_create",
+  SCHEDULER_WORKFLOW_UPDATE: "scheduler.workflow_update",
+  SCHEDULER_WORKFLOW_DELETE: "scheduler.workflow_delete",
+  SCHEDULER_RUN: "scheduler.run",
 } as const;
 
 export class AuditService {

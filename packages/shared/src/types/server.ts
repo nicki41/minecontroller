@@ -14,8 +14,6 @@ export interface ServerDto {
   memoryMb: number;
   cpuCores: number;
   diskLimitMb: number | null;
-  autoRestartEnabled: boolean;
-  restartCron: string | null;
   eulaAccepted: boolean;
   createdAt: string;
   updatedAt: string;
