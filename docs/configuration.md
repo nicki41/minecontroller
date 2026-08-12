@@ -6,7 +6,7 @@ All variables are documented inline in [`.env.example`](../.env.example) — cop
 
 | Variable | Meaning |
 |---|---|
-| `SESSION_SECRET` | Long random value used to sign sessions, CSRF tokens, and every server's derived RCON password. Generate with `openssl rand -hex 32`. **Treat this like a root password** — anyone who has it can forge any session. |
+| `SESSION_SECRET` | Long random value used to sign sessions, CSRF tokens, and legacy-path servers' derived RCON password (see [architecture.md](architecture.md#console-attached-stdin-not-rcon)). Generate with `openssl rand -hex 32`. **Treat this like a root password** — anyone who has it can forge any session. |
 | `WEB_ORIGIN` | The panel's publicly reachable URL (used for cookie and CORS settings). Set this to the real `https://` domain in production. |
 | `COOKIE_SECURE` | Leave `true` once a reverse proxy terminates TLS in front of the panel. Only set `false` for plain local `http://` use without TLS. |
 | `HOST_DATA_PATH` | Normally left unset — auto-detected. See [below](#host_data_path-the-sibling-container-problem). |

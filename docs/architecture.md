@@ -7,7 +7,7 @@ This document explains how minecontroller's pieces fit together: the container l
 - [Component overview](#component-overview)
 - [Directory layout](#directory-layout)
 - [Server creation flow](#server-creation-flow)
-- [Console: RCON, not stdin](#console-rcon-not-stdin)
+- [Console: attached stdin, not RCON](#console-attached-stdin-not-rcon)
 - [Access control (RBAC)](#access-control-rbac)
 - [Design decisions](#design-decisions)
 
@@ -26,11 +26,11 @@ flowchart LR
         end
 
         subgraph MC1["mc-server-1 container"]
-            S1["itzg/docker-minecraft-server"]
+            S1["panel-installed jar<br/>(ghcr.io/.../minecontroller-runtime)"]
         end
 
         subgraph MC2["mc-server-2 container"]
-            S2["itzg/docker-minecraft-server"]
+            S2["panel-installed jar<br/>(ghcr.io/.../minecontroller-runtime)"]
         end
 
         DSOCK[("/var/run/docker.sock")]
@@ -41,15 +41,15 @@ flowchart LR
     API -- "dockerode: create / start / stop / logs" --> DSOCK
     DSOCK -.manages.-> MC1
     DSOCK -.manages.-> MC2
-    API -- "RCON, over mc_net" --> S1
-    API -- "RCON, over mc_net" --> S2
+    API -- "attach (stdin/stdout), over mc_net" --> S1
+    API -- "attach (stdin/stdout), over mc_net" --> S2
 ```
 
 Key points visible in the diagram:
 
 - **No separate database service.** SQLite lives on disk inside the api container's `/data` mount; there's nothing else to run or scale.
-- **The API never shells into a Minecraft container.** It talks to the Docker daemon (to create/start/stop containers and stream logs) and to the Minecraft process itself over RCON (to run console commands). Both hops stay inside the host — RCON is never exposed on a published port.
-- **`mc_net`** is a dedicated Docker network joined by the api container and every Minecraft container, so RCON is reachable by container DNS name without publishing it to the host at all.
+- **The API never shells into a Minecraft container.** It talks to the Docker daemon (to create/start/stop containers and stream logs) and to the Minecraft process itself over a raw stdin/stdout attach (to run console commands — see [below](#console-attached-stdin-not-rcon)). Both hops stay inside the host.
+- **`mc_net`** is a dedicated Docker network joined by the api container and every Minecraft container — not needed for the console itself anymore (attach goes over the Docker socket, not the network), but still used by the small number of servers left on the legacy RCON path, and kept as the shared network every managed container joins regardless of runtime kind.
 
 ## Directory layout
 
@@ -67,44 +67,51 @@ Inside `apps/api/src`:
 |---|---|
 | `modules/<feature>/` | One folder per feature (servers, files, players, roles, users, audit, backups, modrinth, ...), each split into `*.routes.ts` (HTTP handlers + permission checks) and `*.service.ts` (business logic) |
 | `plugins/` | Fastify plugins: `prisma.ts` (SQLite connection, WAL mode), `auth.ts` (session + RBAC decorators), `minecraft.ts` (wires the server manager), `liveSessions.ts`, `metricsHistory.ts` |
-| `minecraft/` | The Docker/RCON orchestration layer — see below |
+| `minecraft/` | The Docker orchestration layer — install pipeline, container lifecycle, console (attach + legacy RCON) — see below |
 | `ws/` | One multiplexed live session per server, backing `/ws/servers/:id` |
 | `lib/` | Cross-cutting utilities: safe path resolution, typed errors, 2FA crypto, `server.properties` codec |
 
 ## Server creation flow
 
-Creating a server touches the wizard, the API, the Docker daemon, and the new container's own entrypoint script before it's ready to use:
+Creating a server touches the wizard, the API, and the Docker daemon — but unlike an all-in-one image that installs itself at container boot, **the panel installs the server before the long-lived container ever exists**:
 
 ```mermaid
 sequenceDiagram
     actor User
     participant Web as React SPA
     participant API as Fastify API
+    participant Ext as Upstream metadata/download API<br/>(Mojang, PaperMC, Fabric...)
     participant Docker as Docker Engine (host)
     participant MC as New server container
 
     User->>Web: Fill out the create-server wizard
     Web->>API: POST /api/servers
     API->>API: requirePermission("servers.create")
-    API->>Docker: create container<br/>(itzg image, HOST_DATA_PATH bind mount, mc_net, resource limits)
+    API-->>Web: 201 Created — status CREATING
+    API->>Ext: resolve install plan (version → download URL + sha, or installer)
+    API->>API: status = INSTALLING
+    API->>Ext: download + hash-verify the server jar onto the bind-mounted data dir
+    API->>API: write eula.txt + generated launch script
+    API->>Docker: create container<br/>(panel's own minimal Java runtime image, data dir bind mount, mc_net, resource limits)
     Docker-->>API: container ID
     API->>Docker: start container
-    API-->>Web: 201 Created — status INSTALLING
-    MC->>MC: itzg entrypoint downloads/builds the server jar
-    API->>MC: poll container status / RCON reachability
+    MC->>MC: entrypoint execs the pre-generated launch script — no install logic of its own
+    API->>MC: attach to stdin/stdout, watch for Minecraft's own "Done" log line
     MC-->>API: server process is up
     API->>API: Server.status = RUNNING
     Web->>API: open WebSocket /ws/servers/:id
     API-->>Web: live status, stats, console lines
 ```
 
-Version/installer lookups per server type (Vanilla, Paper, Fabric, Forge, NeoForge) live in `apps/api/src/minecraft/providers/`, each talking to that ecosystem's own metadata API (Mojang Piston-Meta, PaperMC's `fill.papermc.io`, `meta.fabricmc.net`, etc.). The actual installation work is done by the `itzg/docker-minecraft-server` entrypoint itself — this project does not reimplement a Forge/Fabric/Paper installer.
+Version/installer lookups per server type live in `apps/api/src/minecraft/providers/`, each talking to that ecosystem's own metadata API (Mojang Piston-Meta, PaperMC's `fill.papermc.io`, `meta.fabricmc.net`, etc.) to resolve a concrete download. **Vanilla, Paper, and Fabric** are self-contained server jars, downloaded and hash-verified directly by `ServerInstaller` — this project reimplements that part itself rather than delegating to a third-party image. **Forge and NeoForge** are selectable in the wizard but their install plan isn't implemented yet (they need a real installer *program* run in an ephemeral container, not a direct download) — creating one today fails during `INSTALLING`, not at submission time; see the `TODO(milestone-5)` markers in `ForgeProvider.ts`/`NeoForgeProvider.ts`.
 
-## Console: RCON, not stdin
+A small number of servers created before this panel-owned install pipeline existed still run the old path (`Server.runtime === "LEGACY"`): a stock [`itzg/docker-minecraft-server`](https://github.com/itzg/docker-minecraft-server) container that installs itself at boot from `VERSION`/`TYPE` env vars, controlled over RCON instead of an attach. New servers never use this path — it's kept only so those pre-existing servers keep working, and is expected to be removed once none are left.
 
-Console output is streamed from the Docker log API (`follow: true`); commands are **not** sent via stdin-attach — that path was found to be unreliable against the base image. Instead, the API implements a small Source RCON client (`minecraft/runtime/RconClient.ts`) and talks to each server over `mc_net`.
+## Console: attached stdin, not RCON
 
-Each server's RCON password is never stored — it's derived deterministically per server from `SESSION_SECRET` + the server's ID (HMAC-SHA256, `minecraft/runtime/rconSecret.ts`), so there's one less secret at rest.
+For panel-managed servers (the default for anything created today), the API attaches directly to the container's stdin/stdout (`AttachConsoleSession`, raw TTY, no RCON involved at all) — the container is created with `OpenStdin`/`AttachStdin` and no RCON server ever runs. Commands typed in the Console tab, and every panel-internal poll (online-player list, moderation actions), share this one channel; internal polls are marked `silent` so only user-typed input and the server's own log lines show up in the visible console. Response parsing is prefix-agnostic — Vanilla and Paper log lines are shaped differently (`[HH:MM:SS] [Thread/LEVEL]: ` vs `[HH:MM:SS LEVEL]: `), so replies are sliced from wherever the expected response text actually matched, not a fixed-width prefix strip.
+
+Legacy servers (`Server.runtime === "LEGACY"`, see [above](#server-creation-flow)) still work the old way: console output streamed from the Docker log API, commands sent over a small Source RCON client (`minecraft/runtime/RconClient.ts`) instead — stdin-attach was found unreliable against the third-party base image that path uses. Each such server's RCON password is never stored; it's derived deterministically from `SESSION_SECRET` + the server's ID (HMAC-SHA256, `minecraft/runtime/rconSecret.ts`).
 
 ## Access control (RBAC)
 
@@ -128,7 +135,7 @@ flowchart TD
 ## Design decisions
 
 - **SQLite instead of a separate database server.** A deliberate choice for this deployment profile — one admin or a small team, single-tenant, `docker compose up -d` and nothing else to provision. WAL mode plus a 5-second `busy_timeout` (set in `plugins/prisma.ts`) make brief concurrent writes safe. Because the schema is defined through Prisma, moving to PostgreSQL later would mainly be a provider swap and a fresh migration, not an application rewrite — but it isn't needed at this project's target scale.
-- **One container per Minecraft server**, orchestrated over the Docker socket with `dockerode`, always using `itzg/docker-minecraft-server`-compatible images. That image already handles Vanilla/Paper/Fabric/Forge/NeoForge installation robustly, so this project doesn't maintain its own installer.
-- **RCON over stdin**, as covered above.
-- **Network isolation** via a dedicated `mc_net` Docker network so RCON never needs a published host port.
+- **One container per Minecraft server**, orchestrated over the Docker socket with `dockerode`. Each runs the panel's own minimal Java-only image (`runtime-images/`, published to GHCR) rather than a third-party all-in-one image — the panel resolves, downloads, and verifies the actual server software itself (`ServerInstaller`), so the container only ever execs an already-installed jar.
+- **Attached stdin over RCON**, as covered above — no RCON server, no RCON password, no extra port for panel-managed servers at all. RCON is kept only for the legacy path's pre-existing servers.
+- **Network isolation** via a dedicated `mc_net` Docker network so the legacy path's RCON never needs a published host port.
 - **Two-layer RBAC**, covered above, enforced identically for REST and WebSocket routes.

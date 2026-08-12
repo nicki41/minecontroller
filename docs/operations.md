@@ -54,7 +54,7 @@ The `node` user inside the container didn't have access to the host-mounted Dock
 The chosen or auto-assigned port is already taken by another server, or `MC_PORT_RANGE_MIN`/`MAX` is too narrow for the number of servers you're running.
 
 **Live console shows nothing / commands don't arrive**
-The server must be fully up (status `Running`) — commands go over RCON, which only responds once the Minecraft process has finished booting. See [architecture.md](architecture.md#console-rcon-not-stdin).
+The server must be fully up (status `Running`) — for panel-managed servers the console is a direct stdin/stdout attach to the container, which only exists once the Minecraft process is actually running; for legacy servers, commands go over RCON, which only responds once Minecraft has finished booting. See [architecture.md](architecture.md#console-attached-stdin-not-rcon).
 
 **`database is locked` / `SQLITE_BUSY` in the logs**
 Can happen under brief concurrent SQLite writes. The panel enables WAL mode and a 5-second `busy_timeout` on startup, which makes this practically a non-issue in normal use — if it still happens (e.g. under heavy parallel load), restart the api container. For serious multi-user load with lots of concurrent writes, SQLite simply isn't the right tool — see [architecture.md](architecture.md#design-decisions).

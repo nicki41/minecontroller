@@ -10,9 +10,9 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue.svg" alt="License: GPL-3.0"></a>
 </p>
 
-A self-hosted management panel for multiple Minecraft servers. Each server runs in its own Docker container (base image [`itzg/docker-minecraft-server`](https://github.com/itzg/docker-minecraft-server)), managed through a Fastify/TypeScript API with an embedded SQLite database and a React UI. One container, no separate database service, no build step — the image is pulled pre-built from GitHub Container Registry, so `docker compose up -d` really is all it takes.
+A self-hosted management panel for multiple Minecraft servers. Each server runs in its own Docker container — installed and launched by the panel itself, on minimal Java-only runtime images it publishes ([`runtime-images/`](runtime-images/)), not a third-party all-in-one image — managed through a Fastify/TypeScript API with an embedded SQLite database and a React UI. One container, no separate database service, no build step — every image is pulled pre-built from GitHub Container Registry, so `docker compose up -d` really is all it takes.
 
-**Features:** server creation wizard (Vanilla / Paper / Fabric / Forge / NeoForge) · live console · file manager with a Monaco editor · Modrinth plugin/mod search and install · player management (whitelist / op / kick / ban) · multi-user with role-based and per-server access control · audit log · manual backups · per-server RAM/CPU limits.
+**Features:** server creation wizard (Vanilla / Paper / Fabric fully supported; Forge / NeoForge selectable but their install pipeline isn't finished yet — see [docs/architecture.md](docs/architecture.md#server-creation-flow)) · live attached console · file manager with a Monaco editor · Modrinth plugin/mod search and install · player management (whitelist / op / kick / ban) · multi-user with role-based and per-server access control · audit log · manual backups · per-server RAM/CPU limits.
 
 ## Table of contents
 
@@ -39,10 +39,10 @@ flowchart LR
             API["Fastify API<br/>+ embedded SQLite"]
         end
         subgraph MC1["mc-server-1"]
-            S1["itzg/docker-minecraft-server"]
+            S1["panel-installed jar<br/>on a minimal Java runtime image"]
         end
         subgraph MC2["mc-server-2"]
-            S2["itzg/docker-minecraft-server"]
+            S2["panel-installed jar<br/>on a minimal Java runtime image"]
         end
         DSOCK[("docker.sock")]
     end
@@ -52,8 +52,8 @@ flowchart LR
     API -- "create / start / stop / logs" --> DSOCK
     DSOCK -.manages.-> MC1
     DSOCK -.manages.-> MC2
-    API -- "RCON, over mc_net" --> S1
-    API -- "RCON, over mc_net" --> S2
+    API -- "attach (stdin/stdout)" --> S1
+    API -- "attach (stdin/stdout)" --> S2
 ```
 
 Full breakdown — component diagram, server-creation flow, RBAC model, and the reasoning behind these choices — is in **[docs/architecture.md](docs/architecture.md)**.
