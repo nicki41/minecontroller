@@ -212,6 +212,13 @@ export class MinecraftServerManager extends EventEmitter {
   private async recreateContainer(server: Server): Promise<void> {
     this.closeAttachSession(server.id); // bound to the old container — a fresh one gets created against the new containerId on next use
 
+    // Graceful stop before the force-remove below — force-removing a
+    // running container skips straight to SIGKILL, giving the Minecraft
+    // process no chance to save. runtime.stop() sends SIGTERM and waits
+    // (see its own comment for why the timeout is as long as it is), so
+    // by the time remove() runs the process has normally already exited.
+    await this.runtime.stop(server.containerId!);
+
     if (server.runtime === "PANEL_MANAGED") {
       // Reuse exactly what was installed — an ordinary Restart must never
       // silently roll the server onto a different build (unlike legacy
@@ -592,7 +599,15 @@ function mapDockerStateToStatus(
   if (!info) return "ERROR";
   if (info.State.Running) return current === "RUNNING" ? null : "RUNNING";
   if (info.State.Status === "exited") {
-    return info.State.ExitCode === 0 ? (current === "STOPPED" ? null : "STOPPED") : "ERROR";
+    // A server already marked STOPPED got there via an explicit user
+    // action (stopServer/restartServer), which decides that status itself
+    // once runtime.stop()/remove() resolves. Don't second-guess it here
+    // based on the exit code alone — a slow graceful shutdown that blew
+    // past the stop timeout and got SIGKILLed still exits non-zero, but
+    // that's "stopped, the hard way," not a crash. ERROR is for a server
+    // that dies unexpectedly while nothing asked it to stop.
+    if (current === "STOPPED") return null;
+    return info.State.ExitCode === 0 ? "STOPPED" : "ERROR";
   }
   return null;
 }

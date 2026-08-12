@@ -216,7 +216,13 @@ export class DockerMinecraftRuntime {
     await this.docker.getContainer(containerId).start();
   }
 
-  async stop(containerId: string, timeoutSeconds = 30): Promise<void> {
+  // 90s, not Docker's 10s default: Paper's own shutdown sequence (chunk
+  // system halt, chunk I/O halt, worker pool, I/O pool — see
+  // ChunkHolderManager's log lines) reserves up to 60s per stage. A shorter
+  // window means Docker SIGKILLs a server that's still mid-save, which then
+  // reports a non-zero exit code even though the panel asked it to stop —
+  // see mapDockerStateToStatus()'s handling of an already-STOPPED server.
+  async stop(containerId: string, timeoutSeconds = 90): Promise<void> {
     try {
       await this.docker.getContainer(containerId).stop({ t: timeoutSeconds });
     } catch (err) {
@@ -224,7 +230,7 @@ export class DockerMinecraftRuntime {
     }
   }
 
-  async restart(containerId: string, timeoutSeconds = 30): Promise<void> {
+  async restart(containerId: string, timeoutSeconds = 90): Promise<void> {
     await this.docker.getContainer(containerId).restart({ t: timeoutSeconds });
   }
 

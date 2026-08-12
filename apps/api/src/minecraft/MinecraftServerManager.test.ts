@@ -398,10 +398,17 @@ describe("MinecraftServerManager", () => {
 
       await manager.restartServer(server.id as string);
 
+      expect(runtime.stop).toHaveBeenCalledWith("container-existing");
       expect(runtime.remove).toHaveBeenCalledWith("container-existing", true);
       expect(runtime.createContainer).toHaveBeenCalledWith(expect.objectContaining({ memoryMb: 2048, cpuCores: 2 }));
       expect(runtime.restart).not.toHaveBeenCalled();
       expect(runtime.start).toHaveBeenCalledWith("container-abc123");
+
+      const [stopOrder] = vi.mocked(runtime.stop).mock.invocationCallOrder;
+      const [removeOrder] = vi.mocked(runtime.remove).mock.invocationCallOrder;
+      expect(stopOrder).toBeDefined();
+      expect(removeOrder).toBeDefined();
+      expect(stopOrder!).toBeLessThan(removeOrder!); // graceful stop must happen before the force-remove, not after
 
       await vi.waitFor(async () => {
         const row = await prisma.server.findUnique({ where: { id: server.id as string } });
@@ -584,6 +591,35 @@ describe("MinecraftServerManager", () => {
 
       const row = await prisma.server.findUnique({ where: { id: server.id as string } });
       expect(row?.status).toBe("ERROR");
+    });
+
+    it("leaves an intentionally-STOPPED server alone even if it exited non-zero (e.g. SIGKILLed after the stop timeout)", async () => {
+      const prisma = makeFakePrisma();
+      const server = await prisma.server.create({
+        data: {
+          name: "SlowShutdown",
+          software: "VANILLA",
+          mcVersion: "1.21.1",
+          containerName: "mcpanel-slowshutdown-deadbeef",
+          port: 30005,
+          memoryMb: 1024,
+          cpuCores: 1,
+          dataDir: "servers/slowshutdown",
+          containerId: "container-slowshutdown",
+          status: "STOPPED",
+        },
+      });
+      const runtime = makeFakeRuntime({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        inspect: vi.fn(async () => ({ State: { Running: false, Status: "exited", ExitCode: 137, Error: "" } })) as any,
+      });
+      const manager = new MinecraftServerManager(prisma as never, runtime);
+
+      await manager.reconcile();
+
+      expect(prisma.server.update).not.toHaveBeenCalled();
+      const row = await prisma.server.findUnique({ where: { id: server.id as string } });
+      expect(row?.status).toBe("STOPPED");
     });
 
     it("leaves a RUNNING server alone when Docker agrees it's still running", async () => {
