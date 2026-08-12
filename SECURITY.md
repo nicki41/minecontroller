@@ -4,7 +4,7 @@ minecontroller grants whoever runs it Docker-socket access on the host (needed t
 
 ## Reporting a vulnerability
 
-Please **do not** open a public GitHub issue for a security vulnerability. Instead, email **nlckl88@protonmail.com** with:
+Please **do not** open a public GitHub issue for a security vulnerability. Instead, email **mail@0nicki.de** with:
 
 - A description of the issue and its impact
 - Steps to reproduce (or a PoC, if applicable)
