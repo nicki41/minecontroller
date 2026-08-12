@@ -8,13 +8,16 @@ import { BadRequestError } from "../../lib/errors.js";
 import { resolveRuntimeImageTag } from "../runtime/runtimeImages.js";
 import type { InstallPlan } from "../providers/types.js";
 
-// Direct-download sources currently in use (Vanilla/Paper) — verified live
-// against the real APIs while designing this, not assumed: Mojang serves
-// the server jar itself from piston-data (not piston-meta, which is only
-// the metadata host), and Paper serves it from fill-data (not fill, which
-// is only the API host). Installer-jar sources (Fabric/Forge/NeoForge,
-// milestones 4/5) will extend this list.
-const ALLOWED_DOWNLOAD_HOSTS = new Set(["piston-data.mojang.com", "fill-data.papermc.io"]);
+// Direct-download sources currently in use (Vanilla/Paper/Fabric) — verified
+// live against the real APIs while designing this, not assumed: Mojang
+// serves the server jar itself from piston-data (not piston-meta, which is
+// only the metadata host), Paper serves it from fill-data (not fill, which
+// is only the API host), and Fabric serves its self-contained launcher jar
+// straight from meta.fabricmc.net (the same host as its metadata calls —
+// no separate data host, unlike Mojang/Paper). Forge/NeoForge (milestone 5)
+// use real installer *programs* instead of a direct download and will need
+// a different mechanism, not just another host added here.
+const ALLOWED_DOWNLOAD_HOSTS = new Set(["piston-data.mojang.com", "fill-data.papermc.io", "meta.fabricmc.net"]);
 
 export interface InstallResult {
   buildVersion: string | null;
@@ -38,9 +41,9 @@ export class ServerInstaller {
     const javaImageTag = resolveRuntimeImageTag(plan.javaMajor);
 
     if (plan.kind !== "direct-download") {
-      // Fabric/Forge/NeoForge (milestones 4/5) — their providers already
-      // refuse resolveInstallPlan() for now, so this is an extra guard
-      // against ever reaching here with an install method not yet built.
+      // Forge/NeoForge (milestone 5) — their providers already refuse
+      // resolveInstallPlan() for now, so this is an extra guard against ever
+      // reaching here with an install method not yet built.
       throw new BadRequestError("This server software isn't supported by the new install pipeline yet.");
     }
 

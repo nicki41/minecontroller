@@ -20,7 +20,7 @@ interface InstallPlanBase {
   loaderVersion: string | null;
 }
 
-/** Vanilla/Paper: a single server jar, downloaded and hash-verified directly — no installer program involved. */
+/** Vanilla/Paper/Fabric: a single self-contained server jar, downloaded and hash-verified directly — no installer program involved. */
 export interface InstallPlanDirectDownload extends InstallPlanBase {
   kind: "direct-download";
   url: string;
@@ -29,7 +29,7 @@ export interface InstallPlanDirectDownload extends InstallPlanBase {
   sha256?: string;
 }
 
-/** Fabric/Forge/NeoForge: a real installer *program* that must be run (java -jar ...) to produce the actual server files — see ServerInstaller. */
+/** Forge/NeoForge: a real installer *program* that must be run (java -jar ...) to produce the actual server files — see ServerInstaller. */
 export interface InstallPlanInstallerJar extends InstallPlanBase {
   kind: "installer-jar";
   installerUrl: string;
