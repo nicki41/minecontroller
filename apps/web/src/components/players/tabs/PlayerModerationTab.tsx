@@ -206,7 +206,7 @@ export function PlayerModerationTab({ player: p, serverId, actions, initialCompo
               value={messageText}
               onChange={(e) => setMessageText(e.target.value)}
               placeholder={`Message to ${p.username}…`}
-              className="min-h-9 flex-1 resize-none py-2"
+              className="min-h-9 min-w-0 flex-1 resize-none py-2"
             />
             <Button onClick={() => void handleSend()} disabled={!messageText.trim() || sending}>
               Send

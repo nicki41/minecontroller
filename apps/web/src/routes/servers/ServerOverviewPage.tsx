@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
 import type { MetricsRange } from "@minecraftpanel/shared";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MetricChart, type MetricPoint } from "@/components/servers/MetricChart";
 import { MetricsRangeSelector } from "@/components/servers/MetricsRangeSelector";
 import { useMetricsHistory } from "@/lib/metricsHistory";
-import { formatBytes, formatMb } from "@/lib/format";
+import { formatBytes } from "@/lib/format";
 import { useServerOutletContext } from "./useServerOutletContext";
 
 const CPU_COLOR = "hsl(var(--primary))";
@@ -49,26 +48,6 @@ export default function ServerOverviewPage() {
           <MetricChart title="Network Out" data={series.netTx} color={NET_TX_COLOR} valueFormatter={(v) => formatBytes(v)} />
         </div>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Resource limits</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-2.5 text-sm sm:grid-cols-3">
-          <Row label="RAM limit" value={formatMb(server.memoryMb)} />
-          <Row label="CPU limit" value={`${server.cpuCores} cores`} />
-          <Row label="Disk limit" value={server.diskLimitMb ? formatMb(server.diskLimitMb) : "No limit"} />
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium">{value}</span>
     </div>
   );
 }

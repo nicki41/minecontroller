@@ -71,7 +71,8 @@ export function ModrinthResultCard({ hit, action, installed, compatibleWith }: M
             )}
           </div>
         </div>
-        <p className="line-clamp-2 flex-1 text-xs text-muted-foreground">{hit.description}</p>
+        {/* min-h-8 reserves 2 lines (text-xs line-height 1rem) even for a short 1-line description, so a page's grid rows don't get a few px taller/shorter than the next depending on which descriptions happen to wrap — which was shifting the pagination bar below on every page change. */}
+        <p className="line-clamp-2 min-h-8 flex-1 text-xs text-muted-foreground">{hit.description}</p>
         {compatibleWith && (
           <p className={cn("flex items-center gap-1 text-xs", isCompatible ? "text-status-online" : "text-status-starting")}>
             {isCompatible ? <CheckCircle2 className="h-3 w-3" /> : <TriangleAlert className="h-3 w-3" />}

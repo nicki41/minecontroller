@@ -20,9 +20,6 @@ import {
 import type { Permission } from "@minecraftpanel/shared";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
-import { useServer } from "@/lib/servers";
-import { StatusDot } from "@/components/servers/StatusBadge";
-import { SOFTWARE_META } from "@/lib/softwareMeta";
 import { Logo } from "./Logo";
 
 const SERVER_NAV_ITEMS = [
@@ -84,8 +81,6 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
   // explicitly since that's the creation wizard, not an existing server.
   const serverMatch = matchPath("/servers/:id/*", location.pathname);
   const serverId = serverMatch && serverMatch.params.id !== "new" ? serverMatch.params.id : undefined;
-  const { data } = useServer(serverId);
-  const server = serverId ? data?.server : undefined;
 
   const visibleSections = sections
     .map((section) => ({
@@ -116,16 +111,6 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
           >
             <ChevronLeft className="h-3.5 w-3.5" /> All Servers
           </NavLink>
-
-          <div className="rounded-md border border-border bg-secondary/40 px-2.5 py-2">
-            <p className="truncate text-sm font-semibold">{server?.name ?? " "}</p>
-            {server && (
-              <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <StatusDot status={server.status} />
-                {SOFTWARE_META[server.software].label}
-              </p>
-            )}
-          </div>
 
           <div>
             <p className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Server</p>

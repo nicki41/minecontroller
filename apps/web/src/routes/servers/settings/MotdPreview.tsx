@@ -62,8 +62,8 @@ export function parseMotd(motd: string): MotdSegment[][] {
   });
 }
 
-/** Renders just the styled MOTD lines (no background/border) — reused standalone below the MOTD input and inside ServerListPreview's own mockup chrome. */
-export function MotdLines({ motd, className }: { motd: string; className?: string }) {
+/** Renders just the styled MOTD lines (no background/border) — MotdPreview below wraps this for standalone use under the MOTD input. */
+function MotdLines({ motd, className }: { motd: string; className?: string }) {
   const lines = parseMotd(motd);
 
   return (
@@ -91,4 +91,9 @@ export function MotdLines({ motd, className }: { motd: string; className?: strin
       ))}
     </div>
   );
+}
+
+/** Renders a MOTD the way it would actually look in Minecraft's multiplayer server list. */
+export function MotdPreview({ motd }: { motd: string }) {
+  return <MotdLines motd={motd} className="rounded-md border border-border bg-[#2b2b2b] px-3 py-2 text-sm leading-relaxed" />;
 }
