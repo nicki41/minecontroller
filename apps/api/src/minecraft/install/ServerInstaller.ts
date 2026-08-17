@@ -93,6 +93,18 @@ export class ServerInstaller {
     // pauses. Resolved from the DB's current memoryMb at install/recreate
     // time, not parsed from an env var inside the container.
     //
+    // heapMb is deliberately BELOW memoryMb: the container's cgroup memory
+    // limit (DockerMinecraftRuntime's Memory/MemorySwap) is set to the full
+    // memoryMb, but the JVM also needs off-heap room beyond -Xmx — metaspace,
+    // thread stacks, Netty direct buffers, GC native structures, JIT code
+    // cache. Handing the whole budget to the heap leaves none of that room,
+    // so the process's RSS eventually creeps past the container limit and
+    // gets cgroup-OOM-killed out from under a perfectly healthy JVM (seen in
+    // production: java killed by the kernel OOM killer hours into uptime,
+    // heap pinned at the container's exact memory limit).
+    const headroomMb = Math.min(1024, Math.max(256, Math.round(memoryMb * 0.1)));
+    const heapMb = Math.max(256, memoryMb - headroomMb);
+    //
     // The three -D flags disable JLine, the interactive line-editing library
     // Vanilla/Paper/Forge/NeoForge/Fabric all bundle for their console
     // reader. With stdin genuinely open (needed for AttachConsoleSession),
@@ -108,7 +120,7 @@ export class ServerInstaller {
     // None of this affects the server's ability to *receive* commands via
     // stdin — only how it manages terminal display feedback.
     const jvmFlags = "-Djline.terminal=jline.UnsupportedTerminal -Dterminal.jline=false -Dterminal.ansi=true";
-    const script = `#!/bin/sh\nexec java ${jvmFlags} -Xms${memoryMb}M -Xmx${memoryMb}M -jar "${jarFilename}" nogui\n`;
+    const script = `#!/bin/sh\nexec java ${jvmFlags} -Xms${heapMb}M -Xmx${heapMb}M -jar "${jarFilename}" nogui\n`;
     await fs.writeFile(destPath, script, { mode: 0o755 });
   }
 }
