@@ -139,7 +139,7 @@ export function StepResources({ form }: StepProps) {
   return (
     <div className="space-y-4">
       <FormField label="RAM (MB)" htmlFor="memoryMb" error={errors.memoryMb} hint={memoryMb ? `≈ ${formatMb(memoryMb)}` : undefined}>
-        <Input id="memoryMb" type="number" step={512} min={512} {...register("memoryMb")} />
+        <Input id="memoryMb" type="number" step={512} min={1024} {...register("memoryMb")} />
       </FormField>
       <FormField label="CPU cores" htmlFor="cpuCores" error={errors.cpuCores} hint="Fractional values like 1.5 are fine.">
         <Input id="cpuCores" type="number" step={0.5} min={0.5} {...register("cpuCores")} />

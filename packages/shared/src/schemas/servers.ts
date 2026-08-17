@@ -6,7 +6,7 @@ export const createServerSchema = z.object({
   description: z.string().trim().max(500).optional(),
   software: z.enum(SERVER_SOFTWARE),
   mcVersion: z.string().min(1, "Minecraft version is required"),
-  memoryMb: z.coerce.number().int().min(512, "At least 512 MB").max(65536, "That exceeds any realistic host"),
+  memoryMb: z.coerce.number().int().min(1024, "At least 1024 MB").max(65536, "That exceeds any realistic host"),
   cpuCores: z.coerce.number().min(0.5, "At least 0.5 cores").max(64),
   diskLimitMb: z.coerce
     .number()
@@ -24,7 +24,7 @@ export type CreateServerInput = z.infer<typeof createServerSchema>;
 export const updateServerSettingsSchema = z.object({
   name: z.string().trim().min(1).max(64).optional(),
   description: z.string().trim().max(500).nullable().optional(),
-  memoryMb: z.coerce.number().int().min(512).max(65536).optional(),
+  memoryMb: z.coerce.number().int().min(1024).max(65536).optional(),
   cpuCores: z.coerce.number().min(0.5).max(64).optional(),
   diskLimitMb: z.coerce
     .number()

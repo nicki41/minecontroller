@@ -88,22 +88,24 @@ export class ServerInstaller {
 
   private async writeLaunchScript(root: string, jarFilename: string, memoryMb: number): Promise<void> {
     const destPath = await safeResolve(root, ".mcpanel-launch.sh");
-    // Xms == Xmx (matches the memory-flag convention the legacy itzg path
-    // already uses via its single MEMORY env var) — avoids heap-resize
-    // pauses. Resolved from the DB's current memoryMb at install/recreate
-    // time, not parsed from an env var inside the container.
-    //
-    // heapMb is deliberately BELOW memoryMb: the container's cgroup memory
-    // limit (DockerMinecraftRuntime's Memory/MemorySwap) is set to the full
-    // memoryMb, but the JVM also needs off-heap room beyond -Xmx — metaspace,
-    // thread stacks, Netty direct buffers, GC native structures, JIT code
-    // cache. Handing the whole budget to the heap leaves none of that room,
-    // so the process's RSS eventually creeps past the container limit and
-    // gets cgroup-OOM-killed out from under a perfectly healthy JVM (seen in
-    // production: java killed by the kernel OOM killer hours into uptime,
-    // heap pinned at the container's exact memory limit).
+    // Xmx (heapMb) is deliberately BELOW memoryMb: the container's cgroup
+    // memory limit (DockerMinecraftRuntime's Memory/MemorySwap) is set to
+    // the full memoryMb, but the JVM also needs off-heap room beyond -Xmx —
+    // metaspace, thread stacks, Netty direct buffers, GC native structures,
+    // JIT code cache. Handing the whole budget to the heap leaves none of
+    // that room, so the process's RSS eventually creeps past the container
+    // limit and gets cgroup-OOM-killed out from under a perfectly healthy
+    // JVM (seen in production: java killed by the kernel OOM killer hours
+    // into uptime, heap pinned at the container's exact memory limit).
+    // Resolved from the DB's current memoryMb at install/recreate time, not
+    // parsed from an env var inside the container.
     const headroomMb = Math.min(1024, Math.max(256, Math.round(memoryMb * 0.1)));
     const heapMb = Math.max(256, memoryMb - headroomMb);
+    // Xms starts low (not == Xmx) so a freshly created server doesn't commit
+    // its whole heap budget before anyone's even joined — the JVM grows it
+    // toward heapMb as actual usage demands. The memoryMb schema's 1024 MB
+    // floor keeps heapMb comfortably above this constant.
+    const xmsMb = 512;
     //
     // The three -D flags disable JLine, the interactive line-editing library
     // Vanilla/Paper/Forge/NeoForge/Fabric all bundle for their console
@@ -120,7 +122,7 @@ export class ServerInstaller {
     // None of this affects the server's ability to *receive* commands via
     // stdin — only how it manages terminal display feedback.
     const jvmFlags = "-Djline.terminal=jline.UnsupportedTerminal -Dterminal.jline=false -Dterminal.ansi=true";
-    const script = `#!/bin/sh\nexec java ${jvmFlags} -Xms${heapMb}M -Xmx${heapMb}M -jar "${jarFilename}" nogui\n`;
+    const script = `#!/bin/sh\nexec java ${jvmFlags} -Xms${xmsMb}M -Xmx${heapMb}M -jar "${jarFilename}" nogui\n`;
     await fs.writeFile(destPath, script, { mode: 0o755 });
   }
 }
