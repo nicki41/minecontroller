@@ -7,7 +7,6 @@ import SetupPage from "@/routes/SetupPage";
 import LoginPage from "@/routes/LoginPage";
 import DashboardPage from "@/routes/DashboardPage";
 import AccountSettingsPage from "@/routes/settings/AccountSettingsPage";
-import ServersListPage from "@/routes/servers/ServersListPage";
 import AllocationsPage from "@/routes/servers/AllocationsPage";
 import CreateServerPage from "@/routes/servers/CreateServerPage";
 import ServerDetailLayout from "@/routes/servers/ServerDetailLayout";
@@ -52,7 +51,6 @@ export default function App() {
           <Route element={<AppShell />}>
             <Route index element={<DashboardPage />} />
 
-            <Route path="servers" element={<ServersListPage />} />
             <Route path="servers/allocations" element={<AllocationsPage />} />
             <Route path="servers/new" element={<CreateServerPage />} />
             <Route path="servers/:id" element={<ServerDetailLayout />}>

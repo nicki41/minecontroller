@@ -27,15 +27,33 @@ import { useServers } from "@/lib/servers";
 import { StatusDot } from "@/components/servers/StatusBadge";
 import { Logo } from "./Logo";
 
-const SERVER_NAV_ITEMS = [
-  { to: "overview", label: "Overview", icon: Gauge },
-  { to: "console", label: "Console", icon: SquareTerminal },
-  { to: "files", label: "Files", icon: FolderOpen },
-  { to: "plugins", label: "Plugins/Mods", icon: Blocks },
-  { to: "players", label: "Players", icon: UsersRound },
-  { to: "backups", label: "Backups", icon: Archive },
-  { to: "scheduler", label: "Scheduler", icon: CalendarClock },
-  { to: "settings", label: "Settings", icon: SlidersHorizontal },
+const SERVER_NAV_SECTIONS: { title: string; items: { to: string; label: string; icon: React.ComponentType<{ className?: string }> }[] }[] = [
+  {
+    title: "Monitor",
+    items: [
+      { to: "overview", label: "Overview", icon: Gauge },
+      { to: "console", label: "Console", icon: SquareTerminal },
+    ],
+  },
+  {
+    title: "Manage",
+    items: [
+      { to: "files", label: "Files", icon: FolderOpen },
+      { to: "plugins", label: "Plugins/Mods", icon: Blocks },
+      { to: "players", label: "Players", icon: UsersRound },
+    ],
+  },
+  {
+    title: "Automation",
+    items: [
+      { to: "backups", label: "Backups", icon: Archive },
+      { to: "scheduler", label: "Scheduler", icon: CalendarClock },
+    ],
+  },
+  {
+    title: "Configuration",
+    items: [{ to: "settings", label: "Settings", icon: SlidersHorizontal }],
+  },
 ];
 
 interface NavItem {
@@ -118,29 +136,31 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
       </Link>
 
       {serverId ? (
-        <nav className="flex-1 space-y-3 overflow-y-auto px-3 py-3 scrollbar-thin">
-          <div>
-            <p className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Server</p>
-            <div className="space-y-0.5">
-              {SERVER_NAV_ITEMS.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={`/servers/${serverId}/${item.to}`}
-                  className={({ isActive }) =>
-                    cn(
-                      "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
-                      isActive
-                        ? "bg-primary/15 text-primary"
-                        : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                    )
-                  }
-                >
-                  <item.icon className="h-4 w-4 shrink-0" />
-                  <span className="truncate">{item.label}</span>
-                </NavLink>
-              ))}
+        <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-3 scrollbar-thin">
+          {SERVER_NAV_SECTIONS.map((section) => (
+            <div key={section.title}>
+              <p className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{section.title}</p>
+              <div className="space-y-0.5">
+                {section.items.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={`/servers/${serverId}/${item.to}`}
+                    className={({ isActive }) =>
+                      cn(
+                        "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
+                        isActive
+                          ? "bg-primary/15 text-primary"
+                          : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                      )
+                    }
+                  >
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{item.label}</span>
+                  </NavLink>
+                ))}
+              </div>
             </div>
-          </div>
+          ))}
         </nav>
       ) : (
         <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-3 scrollbar-thin">
@@ -154,32 +174,16 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
               <div className="space-y-0.5">
                 {section.title === "Servers" && canViewServers && (
                   <div>
-                    <div className="flex items-center gap-0.5">
-                      <NavLink
-                        to="/servers"
-                        end
-                        className={({ isActive }) =>
-                          cn(
-                            "flex flex-1 items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
-                            isActive
-                              ? "bg-primary/15 text-primary"
-                              : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                          )
-                        }
-                      >
-                        <Server className="h-4 w-4 shrink-0" />
-                        <span className="truncate">All Servers</span>
-                      </NavLink>
-                      <button
-                        type="button"
-                        aria-label={allServersOpen ? "Collapse server list" : "Expand server list"}
-                        aria-expanded={allServersOpen}
-                        onClick={() => setAllServersOpen((v) => !v)}
-                        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                      >
-                        <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", allServersOpen && "rotate-90")} />
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      aria-expanded={allServersOpen}
+                      onClick={() => setAllServersOpen((v) => !v)}
+                      className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    >
+                      <Server className="h-4 w-4 shrink-0" />
+                      <span className="flex-1 truncate text-left">All Servers</span>
+                      <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 transition-transform", allServersOpen && "rotate-90")} />
+                    </button>
 
                     {allServersOpen && servers.length > 0 && (
                       <div className="ml-4 space-y-0.5 border-l border-border pl-2.5">

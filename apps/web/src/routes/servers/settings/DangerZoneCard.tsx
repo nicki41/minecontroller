@@ -31,7 +31,7 @@ export function DangerZoneCard({ server }: { server: ServerDto }) {
     try {
       await del.mutateAsync({ id: server.id, keepFiles });
       toast.success("Server deleted.");
-      navigate("/servers");
+      navigate("/");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed to delete server.");
     }
