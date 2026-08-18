@@ -205,8 +205,29 @@ model Server {
   playerIpHistory  PlayerIpHistory[]
   playerBans       PlayerBan[]
   schedulerWorkflows SchedulerWorkflow[]
+  allocations      ServerAllocation[]
 
   @@index([status])
+}
+
+// ------------------------------------------------------------------
+// Extra port allocations — published on the host in addition to
+// Server.port (the fixed primary/game port). Lets a server open extra
+// ports for things like Dynmap/BlueMap/voice chat/Geyser. Applied to
+// the Docker container by MinecraftServerManager on next (re)start,
+// same as memoryMb/cpuCores — see DockerMinecraftRuntime.createContainer.
+// ------------------------------------------------------------------
+
+model ServerAllocation {
+  id        String   @id @default(cuid())
+  serverId  String
+  /// Globally unique across every server's Server.port AND every other ServerAllocation.port — enforced here at the DB level and re-checked at the API layer against Server.port (which lives in a different column, so no DB constraint can span both).
+  port      Int      @unique
+  createdAt DateTime @default(now())
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId])
 }
 
 // ------------------------------------------------------------------

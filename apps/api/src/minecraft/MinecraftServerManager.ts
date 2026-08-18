@@ -219,6 +219,8 @@ export class MinecraftServerManager extends EventEmitter {
     // by the time remove() runs the process has normally already exited.
     await this.runtime.stop(server.containerId!);
 
+    const extraPorts = (await this.prisma.serverAllocation.findMany({ where: { serverId: server.id } })).map((a) => a.port);
+
     if (server.runtime === "PANEL_MANAGED") {
       // Reuse exactly what was installed — an ordinary Restart must never
       // silently roll the server onto a different build (unlike legacy
@@ -237,6 +239,7 @@ export class MinecraftServerManager extends EventEmitter {
         runtime: "PANEL_MANAGED",
         mcVersion: server.mcVersion,
         hostPort: server.port,
+        extraPorts,
         memoryMb: server.memoryMb,
         cpuCores: server.cpuCores,
         eulaAccepted: server.eulaAccepted,
@@ -258,6 +261,7 @@ export class MinecraftServerManager extends EventEmitter {
       softwareEnv,
       mcVersion: server.mcVersion,
       hostPort: server.port,
+      extraPorts,
       memoryMb: server.memoryMb,
       cpuCores: server.cpuCores,
       rconPassword,
@@ -403,6 +407,8 @@ export class MinecraftServerManager extends EventEmitter {
     // itself afterward. See the note in DockerMinecraftRuntime.createContainer().
     await this.configService.createWithDefaults(server, "server-properties");
 
+    const extraPorts = (await this.prisma.serverAllocation.findMany({ where: { serverId: server.id } })).map((a) => a.port);
+
     if (server.runtime === "PANEL_MANAGED") {
       // INSTALLING covers the actual download/verify (or, once Fabric/Forge/
       // NeoForge land, the ephemeral installer container) — set BEFORE that
@@ -422,6 +428,7 @@ export class MinecraftServerManager extends EventEmitter {
         runtime: "PANEL_MANAGED",
         mcVersion: server.mcVersion,
         hostPort: server.port,
+        extraPorts,
         memoryMb: server.memoryMb,
         cpuCores: server.cpuCores,
         eulaAccepted: server.eulaAccepted,
@@ -444,6 +451,7 @@ export class MinecraftServerManager extends EventEmitter {
       softwareEnv,
       mcVersion: server.mcVersion,
       hostPort: server.port,
+      extraPorts,
       memoryMb: server.memoryMb,
       cpuCores: server.cpuCores,
       rconPassword,

@@ -4,6 +4,7 @@ import { systemRoutes } from "./system/system.routes.js";
 import { authRoutes } from "./auth/auth.routes.js";
 import { serversRoutes } from "./servers/servers.routes.js";
 import { serversWsRoutes } from "./servers/servers.ws.js";
+import { allocationsRoutes } from "./servers/allocations.routes.js";
 import { filesRoutes } from "./files/files.routes.js";
 import { serverConfigRoutes } from "./serverConfig/serverConfig.routes.js";
 import { modrinthRoutes } from "./modrinth/modrinth.routes.js";
@@ -27,6 +28,7 @@ export async function registerApiRoutes(app: FastifyInstance) {
   await app.register(authRoutes, { prefix: "/api/auth" });
   await app.register(serversRoutes, { prefix: "/api/servers" });
   await app.register(serversWsRoutes, { prefix: "/ws/servers" });
+  await app.register(allocationsRoutes, { prefix: "/api/servers/:id/allocations" });
   await app.register(filesRoutes, { prefix: "/api/servers/:id/files" });
   await app.register(serverConfigRoutes, { prefix: "/api/servers/:id/config" });
   await app.register(modrinthRoutes, { prefix: "/api/modrinth" });

@@ -1,12 +1,12 @@
 /**
  * Branded loading animation: the gem-mark cube (see Logo.tsx) builds face by
- * face while the "minecraft"/"panel" wordmark flies in and a progress bar
+ * face while the "mine"/"controller" wordmark flies in and a progress bar
  * fills, then the whole lockup fades out. Everything is a pure function of
  * `progress` (0..1) — callers drive that from real load state (see
  * AppLoadingOverlay / RequireAuth via useTrickleProgress), not a timer.
  *
  * Ported from the Claude Design prototype (minecontroller-loader-scene.jsx),
- * adapted to this app's actual "minecraftpanel" wordmark and dark-only palette.
+ * adapted to this app's actual "minecontroller" wordmark and dark-only palette.
  */
 const easeOutQuad = (t: number) => 1 - (1 - t) ** 2;
 const easeOutQuart = (t: number) => 1 - (1 - t) ** 4;
@@ -71,10 +71,10 @@ export function LoadingLogo({ progress }: { progress: number }) {
       <Cube size={112} opacity={lockupOpacity} scale={cubeScale} faceStagger={faceStagger} />
       <div className="flex items-baseline gap-0 overflow-visible text-3xl" style={{ letterSpacing: "-0.01em" }}>
         <span className="text-muted-foreground" style={{ opacity: mineOpacity, transform: `translateY(${mineY}px)` }}>
-          minecraft
+          mine
         </span>
         <span className="font-bold text-primary" style={{ opacity: panelOpacity, transform: `translateX(${panelOffset}px)` }}>
-          panel
+          controller
         </span>
       </div>
       <div className="h-[3px] w-56 overflow-hidden rounded-full bg-secondary" style={{ opacity: lockupOpacity }}>

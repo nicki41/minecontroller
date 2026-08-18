@@ -15,7 +15,7 @@ export function AuthShell({ title, description, children, footer }: AuthShellPro
         <div className="flex flex-col items-center gap-2 text-center">
           <Logo className="h-10 w-10" />
           <span className="text-sm font-semibold tracking-tight text-muted-foreground">
-            minecraft<span className="font-bold text-primary">panel</span>
+            mine<span className="font-bold text-primary">controller</span>
           </span>
         </div>
 

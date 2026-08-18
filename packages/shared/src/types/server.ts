@@ -1,5 +1,12 @@
 import type { AccessLevel, ServerRuntime, ServerSoftware, ServerStatus } from "./enums.js";
 
+export interface ServerAllocationDto {
+  id: string;
+  /** Extra host port published alongside ServerDto.port — see the ServerAllocation model doc comment for why this is a separate table instead of an array column. */
+  port: number;
+  createdAt: string;
+}
+
 export interface ServerDto {
   id: string;
   name: string;
@@ -11,6 +18,8 @@ export interface ServerDto {
   status: ServerStatus;
   statusDetail: string | null;
   port: number;
+  /** Extra ports published in addition to `port` — managed from the Allocations page, applied on next (re)start. */
+  allocations: ServerAllocationDto[];
   memoryMb: number;
   cpuCores: number;
   diskLimitMb: number | null;

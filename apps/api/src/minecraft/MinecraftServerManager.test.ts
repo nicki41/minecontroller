@@ -142,6 +142,12 @@ function makeFakePrisma() {
       }),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any,
+    // No test currently exercises extra port allocations — always empty,
+    // same as a freshly migrated DB with no ServerAllocation rows yet.
+    serverAllocation: {
+      findMany: vi.fn(async () => []),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any,
   };
 }
 

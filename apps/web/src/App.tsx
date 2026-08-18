@@ -8,6 +8,7 @@ import LoginPage from "@/routes/LoginPage";
 import DashboardPage from "@/routes/DashboardPage";
 import AccountSettingsPage from "@/routes/settings/AccountSettingsPage";
 import ServersListPage from "@/routes/servers/ServersListPage";
+import AllocationsPage from "@/routes/servers/AllocationsPage";
 import CreateServerPage from "@/routes/servers/CreateServerPage";
 import ServerDetailLayout from "@/routes/servers/ServerDetailLayout";
 import ServerOverviewPage from "@/routes/servers/ServerOverviewPage";
@@ -52,6 +53,7 @@ export default function App() {
             <Route index element={<DashboardPage />} />
 
             <Route path="servers" element={<ServersListPage />} />
+            <Route path="servers/allocations" element={<AllocationsPage />} />
             <Route path="servers/new" element={<CreateServerPage />} />
             <Route path="servers/:id" element={<ServerDetailLayout />}>
               <Route index element={<Navigate to="overview" replace />} />

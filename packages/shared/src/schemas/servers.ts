@@ -40,3 +40,8 @@ export const executeCommandSchema = z.object({
   command: z.string().trim().min(1, "Command is required").max(1000),
 });
 export type ExecuteCommandInput = z.infer<typeof executeCommandSchema>;
+
+export const createAllocationSchema = z.object({
+  port: z.coerce.number().int().min(1).max(65535),
+});
+export type CreateAllocationInput = z.infer<typeof createAllocationSchema>;

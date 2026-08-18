@@ -28,6 +28,8 @@ export const AuditAction = {
   SERVER_RESTART: "server.restart",
   SERVER_SETTINGS_UPDATE: "server.settings_update",
   SERVER_CONFIG_UPDATE: "server.config_update",
+  SERVER_ALLOCATION_CREATE: "server.allocation_create",
+  SERVER_ALLOCATION_DELETE: "server.allocation_delete",
   CONSOLE_EXECUTE: "console.execute",
   FILE_CREATE: "file.create",
   FILE_EDIT: "file.edit",

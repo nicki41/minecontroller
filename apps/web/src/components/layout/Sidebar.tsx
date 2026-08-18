@@ -1,4 +1,5 @@
-import { NavLink, useLocation, matchPath } from "react-router-dom";
+import { useState } from "react";
+import { Link, NavLink, useLocation, matchPath } from "react-router-dom";
 import {
   LayoutDashboard,
   Server,
@@ -8,7 +9,6 @@ import {
   ShieldCheck,
   ScrollText,
   Settings,
-  ChevronLeft,
   Gauge,
   SquareTerminal,
   FolderOpen,
@@ -17,10 +17,14 @@ import {
   SlidersHorizontal,
   Archive,
   CalendarClock,
+  Network,
+  ChevronRight,
 } from "lucide-react";
 import type { Permission } from "@minecraftpanel/shared";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
+import { useServers } from "@/lib/servers";
+import { StatusDot } from "@/components/servers/StatusBadge";
 import { Logo } from "./Logo";
 
 const SERVER_NAV_ITEMS = [
@@ -53,7 +57,7 @@ const sections: NavSection[] = [
   {
     title: "Servers",
     items: [
-      { to: "/servers", label: "All Servers", icon: Server, end: true, permission: "servers.view" },
+      { to: "/servers/allocations", label: "Allocations", icon: Network, permission: "servers.view" },
       { to: "/servers/new", label: "Create Server", icon: PlusCircle, permission: "servers.create" },
     ],
   },
@@ -79,10 +83,16 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
   const { hasPermission } = useAuth();
   const location = useLocation();
 
-  // "/servers/new" also matches this splat pattern (id="new") — excluded
-  // explicitly since that's the creation wizard, not an existing server.
+  // "/servers/new" and "/servers/allocations" also match this splat pattern
+  // (id="new"/"allocations") — excluded explicitly since those are the
+  // creation wizard and the allocations page, not an existing server.
   const serverMatch = matchPath("/servers/:id/*", location.pathname);
-  const serverId = serverMatch && serverMatch.params.id !== "new" ? serverMatch.params.id : undefined;
+  const serverId =
+    serverMatch && serverMatch.params.id !== "new" && serverMatch.params.id !== "allocations" ? serverMatch.params.id : undefined;
+
+  const [allServersOpen, setAllServersOpen] = useState(() => Boolean(serverId));
+  const { data } = useServers();
+  const servers = data?.servers ?? [];
 
   const visibleSections = sections
     .map((section) => ({
@@ -91,6 +101,8 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
     }))
     .filter((section) => section.items.length > 0);
 
+  const canViewServers = hasPermission("servers.view");
+
   return (
     <aside
       className={cn(
@@ -98,22 +110,15 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
         collapsed ? "w-0 overflow-hidden border-r-0" : "w-64",
       )}
     >
-      <div className="flex h-14 shrink-0 items-center gap-2 px-4">
+      <Link to="/" className="flex h-14 shrink-0 items-center gap-2 px-4 hover:bg-accent/50">
         <Logo className="h-7 w-7 shrink-0" />
         <span className="text-sm font-semibold tracking-tight">
-          minecraft<span className="font-bold text-primary">panel</span>
+          mine<span className="font-bold text-primary">controller</span>
         </span>
-      </div>
+      </Link>
 
       {serverId ? (
         <nav className="flex-1 space-y-3 overflow-y-auto px-3 py-3 scrollbar-thin">
-          <NavLink
-            to="/servers"
-            className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" /> All Servers
-          </NavLink>
-
           <div>
             <p className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Server</p>
             <div className="space-y-0.5">
@@ -147,6 +152,59 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
                 </p>
               )}
               <div className="space-y-0.5">
+                {section.title === "Servers" && canViewServers && (
+                  <div>
+                    <div className="flex items-center gap-0.5">
+                      <NavLink
+                        to="/servers"
+                        end
+                        className={({ isActive }) =>
+                          cn(
+                            "flex flex-1 items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
+                            isActive
+                              ? "bg-primary/15 text-primary"
+                              : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                          )
+                        }
+                      >
+                        <Server className="h-4 w-4 shrink-0" />
+                        <span className="truncate">All Servers</span>
+                      </NavLink>
+                      <button
+                        type="button"
+                        aria-label={allServersOpen ? "Collapse server list" : "Expand server list"}
+                        aria-expanded={allServersOpen}
+                        onClick={() => setAllServersOpen((v) => !v)}
+                        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                      >
+                        <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", allServersOpen && "rotate-90")} />
+                      </button>
+                    </div>
+
+                    {allServersOpen && servers.length > 0 && (
+                      <div className="ml-4 space-y-0.5 border-l border-border pl-2.5">
+                        {servers.map((server) => (
+                          <NavLink
+                            key={server.id}
+                            to={`/servers/${server.id}`}
+                            className={({ isActive }) =>
+                              cn(
+                                "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+                                isActive
+                                  ? "bg-primary/15 font-medium text-primary"
+                                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                              )
+                            }
+                          >
+                            <StatusDot status={server.status} />
+                            <span className="truncate">{server.name}</span>
+                          </NavLink>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {section.items.map((item) => (
                   <NavLink
                     key={item.to}

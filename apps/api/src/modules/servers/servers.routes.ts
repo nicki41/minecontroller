@@ -36,10 +36,10 @@ export async function serversRoutes(fastify: FastifyInstance) {
 
   fastify.get("/", { preHandler: fastify.requirePermission("servers.view") }, async (request, reply) => {
     const user = request.user!;
-    const servers = await fastify.prisma.server.findMany({ orderBy: { createdAt: "desc" } });
+    const servers = await fastify.prisma.server.findMany({ orderBy: { createdAt: "desc" }, include: { allocations: true } });
 
     if (user.isOwner) {
-      return reply.send({ servers: servers.map((s) => serializeServer(s, "FULL")) });
+      return reply.send({ servers: servers.map((s) => serializeServer(s, "FULL", s.allocations)) });
     }
 
     const accessRows = await fastify.prisma.serverAccess.findMany({ where: { userId: user.id } });
@@ -49,7 +49,7 @@ export async function serversRoutes(fastify: FastifyInstance) {
       .map((server) => {
         const level = (accessByServerId.get(server.id) as AccessLevel | undefined) ?? null;
         const effective = effectiveServerPermissions([...user.permissions], level);
-        return effective.has("servers.view") ? serializeServer(server, level!) : null;
+        return effective.has("servers.view") ? serializeServer(server, level!, server.allocations) : null;
       })
       .filter((s) => s !== null);
 
@@ -70,7 +70,8 @@ export async function serversRoutes(fastify: FastifyInstance) {
   });
 
   fastify.get("/:id", { preHandler: fastify.requireServerAccess("servers.view") }, async (request, reply) => {
-    return reply.send({ server: serializeServer(request.mcServer!, request.serverAccessLevel ?? "FULL") });
+    const allocations = await fastify.prisma.serverAllocation.findMany({ where: { serverId: request.mcServer!.id } });
+    return reply.send({ server: serializeServer(request.mcServer!, request.serverAccessLevel ?? "FULL", allocations) });
   });
 
   fastify.get("/:id/stats", { preHandler: fastify.requireServerAccess("servers.view") }, async (request, reply) => {
@@ -107,7 +108,8 @@ export async function serversRoutes(fastify: FastifyInstance) {
       ipAddress: request.ip,
     }, input);
 
-    return reply.send({ server: serializeServer(server, request.serverAccessLevel ?? "FULL") });
+    const allocations = await fastify.prisma.serverAllocation.findMany({ where: { serverId: server.id } });
+    return reply.send({ server: serializeServer(server, request.serverAccessLevel ?? "FULL", allocations) });
   });
 
   fastify.get("/:id/icon", { preHandler: fastify.requireServerAccess("servers.view") }, async (request, reply) => {

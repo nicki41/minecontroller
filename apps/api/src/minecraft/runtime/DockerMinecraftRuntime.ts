@@ -15,6 +15,8 @@ export interface CreateContainerOptions {
   runtime: ServerRuntime;
   mcVersion: string;
   hostPort: number;
+  /** Extra ports published 1:1 (host==container, tcp+udp) alongside hostPort — see ServerAllocation. */
+  extraPorts?: number[];
   memoryMb: number;
   cpuCores: number;
   /** Must be true — the caller (MinecraftServerManager) is responsible for only ever passing the user's actual, explicit consent through here. */
@@ -86,13 +88,17 @@ export class DockerMinecraftRuntime {
     // process's own OS — see README "Docker socket & host paths".
     const hostDataPath = await resolveHostDataPath();
     const hostDataDir = `${hostDataPath.replace(/\/+$/, "")}/servers/${options.serverId}`;
+    const extraPorts = options.extraPorts ?? [];
     const sharedHostConfig = {
       Memory: options.memoryMb * 1024 * 1024,
       MemorySwap: options.memoryMb * 1024 * 1024, // no swap beyond the memory limit
       NanoCpus: Math.round(options.cpuCores * 1e9),
       PidsLimit: 2048,
       RestartPolicy: { Name: "unless-stopped" },
-      PortBindings: { [`${CONTAINER_GAME_PORT}/tcp`]: [{ HostPort: String(options.hostPort) }] },
+      PortBindings: {
+        [`${CONTAINER_GAME_PORT}/tcp`]: [{ HostPort: String(options.hostPort) }],
+        ...extraPortBindings(extraPorts),
+      },
       Binds: [`${hostDataDir}:/data`],
       LogConfig: { Type: "json-file", Config: { "max-size": "10m", "max-file": "3" } },
     };
@@ -117,7 +123,7 @@ export class DockerMinecraftRuntime {
         OpenStdin: true,
         StdinOnce: false,
         AttachStdin: true,
-        ExposedPorts: { [`${CONTAINER_GAME_PORT}/tcp`]: {} },
+        ExposedPorts: { [`${CONTAINER_GAME_PORT}/tcp`]: {}, ...extraExposedPorts(extraPorts) },
         HostConfig: {
           ...sharedHostConfig,
           // Unlike the itzg-based container: the panel creates /data itself
@@ -171,7 +177,7 @@ export class DockerMinecraftRuntime {
       // mode the image documents itself for — see README for why we still
       // don't set OpenStdin (commands go through RCON instead).
       Tty: true,
-      ExposedPorts: { [`${CONTAINER_GAME_PORT}/tcp`]: {} },
+      ExposedPorts: { [`${CONTAINER_GAME_PORT}/tcp`]: {}, ...extraExposedPorts(extraPorts) },
       HostConfig: {
         ...sharedHostConfig,
         // No CapDrop here (unlike the panel's own API container): the
@@ -302,6 +308,28 @@ function computeStats(stats: DockerStatsPayload): Omit<ContainerStats, "startedA
     networkRxBytes,
     networkTxBytes,
   };
+}
+
+// Extra allocations are published host==container on both protocols — the
+// panel has no visibility into what a given plugin listens on internally,
+// so it just opens the port the admin picked (same default Pterodactyl
+// allocations use).
+function extraPortBindings(ports: number[]): Record<string, { HostPort: string }[]> {
+  const bindings: Record<string, { HostPort: string }[]> = {};
+  for (const port of ports) {
+    bindings[`${port}/tcp`] = [{ HostPort: String(port) }];
+    bindings[`${port}/udp`] = [{ HostPort: String(port) }];
+  }
+  return bindings;
+}
+
+function extraExposedPorts(ports: number[]): Record<string, Record<string, never>> {
+  const exposed: Record<string, Record<string, never>> = {};
+  for (const port of ports) {
+    exposed[`${port}/tcp`] = {};
+    exposed[`${port}/udp`] = {};
+  }
+  return exposed;
 }
 
 function isDockerStatus(err: unknown, statusCode: number): boolean {
