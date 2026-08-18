@@ -5,15 +5,31 @@ Day-to-day running of the panel: first admin setup, backups, updates, and troubl
 ## Table of contents
 
 - [First admin account](#first-admin-account)
+- [Port allocations](#port-allocations)
 - [Backups](#backups)
 - [Updates](#updates)
 - [Troubleshooting](#troubleshooting)
 
 ## First admin account
 
-On the very first visit to `http://localhost:3000`, the panel detects that no user exists yet and shows a setup wizard for creating the first admin account (the `Owner` role, with every permission). The endpoint behind it, `POST /api/auth/setup`, only works server-side **while the database has zero users** — once the first account is created it's permanently locked, regardless of what the frontend shows.
+On the very first visit to `http://localhost:3000`, the panel detects that no user exists yet and shows a setup wizard for creating the first admin account (the `Owner` role, with every permission). The endpoint behind it, `POST /api/auth/setup`, only works server-side **while the database has zero users** — once the first account is created it's permanently locked, regardless of what the frontend shows. See the main README's [First-time setup](../README.md#first-time-setup) for a full walkthrough from this point through creating your first server.
 
 Additional users are created afterwards under **Admin → Users** by an Owner/Admin, including role assignment and optional per-server access (full or view-only, per server).
+
+**Lost the only admin account's password?** There's no self-service "forgot password" flow (a deliberate scope cut — see [security.md](security.md) for the rest of what is and isn't in place). Recovery means going straight to the database: stop the panel (`docker compose down`), open `data/db.sqlite` with any SQLite client (or run `docker compose run --rm api npx prisma studio` from the repo, pointed at that file), and either update the `User.passwordHash` column directly (needs an Argon2id hash, e.g. produced by a one-off Node script using this project's own `@node-rs/argon2` dependency) or, if you're comfortable losing that account's history, delete its row entirely — the setup wizard reopens the moment the `User` table is empty again. Either way, restart the panel afterward.
+
+## Port allocations
+
+Every server gets one **primary port** (the actual Minecraft protocol port, shown as `ip:port` on its card) — chosen automatically from `MC_PORT_RANGE_MIN`–`MC_PORT_RANGE_MAX` at creation time (see [configuration.md](configuration.md)), or set explicitly if you passed one in the creation request. That part hasn't changed.
+
+**Allocations** are *additional* ports a server can publish — for a web-based map (Dynmap/BlueMap), a voice-chat plugin, Geyser (Bedrock cross-play), a query port, or anything else a plugin/mod wants to listen on. Manage them from **Allocations** in the main sidebar — a main-page view listing every server you can see, not something buried in that server's own settings, since picking ports is really an instance-wide concern (nothing can collide with anything else you're running).
+
+- **Adding one**: pick the server's card, type a port, submit. The panel checks it isn't already in use — as another server's primary port, another server's allocation, or this server's own primary port — before accepting it. That check is enforced server-side (a `409 Conflict` if it collides), not just in the UI.
+- **Removing one**: click the `×` on its chip. No confirmation dialog — it's a reversible, low-stakes action (you can always re-add the same port).
+- **Applying it**: like a RAM/CPU change, a new or removed allocation is baked into the server's Docker container at (re)creation time — it takes effect the next time that specific server restarts, not instantly. The panel tells you this when you add/remove one.
+- **Protocol**: each extra port is published for both TCP and UDP, host port equal to container port — the panel has no way to know which protocol a given plugin actually needs, so it opens both rather than guessing.
+
+Removing a server's underlying container (delete, or any Docker-level container recreation) also removes its allocation rows via a cascading delete — there's nothing to clean up by hand.
 
 ## Backups
 
@@ -51,7 +67,7 @@ Usually a misconfigured `HOST_DATA_PATH` — see [configuration.md](configuratio
 The `node` user inside the container didn't have access to the host-mounted Docker socket, because the socket's group GID on the host didn't match the container's GID. The entrypoint script detects the socket's actual GID at startup and adds `node` to a matching group automatically (see `docker/entrypoint.sh`) — no manual action needed. If it still happens, pull the latest image (`docker compose pull api && docker compose up -d`) — an old image may predate this fix.
 
 **Server creation fails with "Port already used"**
-The chosen or auto-assigned port is already taken by another server, or `MC_PORT_RANGE_MIN`/`MAX` is too narrow for the number of servers you're running.
+The chosen or auto-assigned port is already taken by another server, or `MC_PORT_RANGE_MIN`/`MAX` is too narrow for the number of servers you're running. The same "already in use" check applies to [port allocations](#port-allocations) — a `409 Conflict` there means that exact port is already a primary port or allocation somewhere else in the instance.
 
 **Live console shows nothing / commands don't arrive**
 The server must be fully up (status `Running`) — for panel-managed servers the console is a direct stdin/stdout attach to the container, which only exists once the Minecraft process is actually running; for legacy servers, commands go over RCON, which only responds once Minecraft has finished booting. See [architecture.md](architecture.md#console-attached-stdin-not-rcon).
