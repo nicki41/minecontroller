@@ -186,11 +186,18 @@ function SessionsCard() {
           <div key={session.id}>
             {i > 0 && <Separator className="my-1" />}
             <div className="flex items-center justify-between gap-3 py-2.5">
-              <div className="flex items-start gap-3">
+              {/*
+                min-w-0 at every nested flex level: .truncate alone only sets
+                overflow-hidden/ellipsis, it doesn't shrink a flex item below
+                its content size (default min-width:auto) — without min-w-0
+                threaded all the way down, a long raw User-Agent string blew
+                the whole page out to ~1140px wide on a 320px viewport.
+              */}
+              <div className="flex min-w-0 flex-1 items-start gap-3">
                 <Monitor className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="truncate">{session.userAgent || "Unknown device"}</span>
+                <div className="min-w-0 space-y-0.5">
+                  <div className="flex min-w-0 items-center gap-2 text-sm">
+                    <span className="min-w-0 truncate">{session.userAgent || "Unknown device"}</span>
                     {session.isCurrent && (
                       <Badge variant="secondary" className="gap-1">
                         <ShieldCheck className="h-3 w-3" /> This device

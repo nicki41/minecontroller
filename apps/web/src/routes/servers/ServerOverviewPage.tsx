@@ -39,7 +39,7 @@ export default function ServerOverviewPage() {
           <h2 className="text-sm font-semibold text-muted-foreground">Metrics over time</h2>
           <MetricsRangeSelector value={range} onChange={setRange} />
         </div>
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <MetricChart title="CPU" data={series.cpu} color={CPU_COLOR} valueFormatter={(v) => `${v.toFixed(0)}%`} yDomain={[0, 100]} />
           <MetricChart title="RAM" data={series.ram} color={RAM_COLOR} valueFormatter={(v) => formatBytes(v)} />
           <MetricChart title="Disk" data={series.disk} color={DISK_COLOR} valueFormatter={(v) => formatBytes(v)} connectNulls />

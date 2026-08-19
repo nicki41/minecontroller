@@ -156,7 +156,7 @@ export default function RolesPage() {
       {isLoading && <Skeleton className="h-64 w-full" />}
 
       {!isLoading && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {data?.roles.map((role) => (
             <Card key={role.id}>
               <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">

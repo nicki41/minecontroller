@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation, matchPath } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -97,9 +97,45 @@ const sections: NavSection[] = [
   },
 ];
 
-export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
+interface SidebarProps {
+  /** Desktop (≥md) collapse state — shrinks the flex-row aside to zero width. */
+  collapsed?: boolean;
+  /** Mobile (<md) off-canvas drawer state — slides in as a fixed overlay. */
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
+}
+
+const SWIPE_CLOSE_THRESHOLD_PX = 60;
+
+export function Sidebar({ collapsed = false, mobileOpen = false, onCloseMobile }: SidebarProps) {
   const { hasPermission } = useAuth();
   const location = useLocation();
+  const touchStartX = useRef<number | null>(null);
+  const touchDeltaX = useRef(0);
+
+  // Close the drawer on Escape while it's open.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCloseMobile?.();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mobileOpen, onCloseMobile]);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0]?.clientX ?? null;
+    touchDeltaX.current = 0;
+  };
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || !e.touches[0]) return;
+    touchDeltaX.current = e.touches[0].clientX - touchStartX.current;
+  };
+  const handleTouchEnd = () => {
+    if (touchDeltaX.current < -SWIPE_CLOSE_THRESHOLD_PX) onCloseMobile?.();
+    touchStartX.current = null;
+    touchDeltaX.current = 0;
+  };
 
   // "/servers/new" and "/servers/allocations" also match this splat pattern
   // (id="new"/"allocations") — excluded explicitly since those are the
@@ -122,13 +158,31 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
   const canViewServers = hasPermission("servers.view");
 
   return (
-    <aside
-      className={cn(
-        "flex h-full flex-col border-r border-border bg-card transition-all duration-200",
-        collapsed ? "w-0 overflow-hidden border-r-0" : "w-64",
+    <>
+      {/* Mobile-only backdrop — tapping it closes the drawer, same as swipe/Escape. */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={onCloseMobile}
+          aria-hidden="true"
+        />
       )}
-    >
-      <Link to="/" className="flex h-14 shrink-0 items-center gap-2 px-4 hover:bg-accent/50">
+      <aside
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        className={cn(
+          // Mobile (<md): always position:fixed (out of the flex-row layout
+          // flow regardless of open/closed) and slid on/off screen via
+          // transform, so open/close animates smoothly with no layout jump.
+          "fixed inset-y-0 left-0 z-50 flex h-full w-72 flex-col border-r border-border bg-card shadow-2xl transition-transform duration-200",
+          mobileOpen ? "translate-x-0" : "-translate-x-full",
+          // Desktop (md+): back in normal flow, original collapse-to-zero-width behavior.
+          "md:static md:z-auto md:w-64 md:translate-x-0 md:shadow-none md:transition-[width] md:duration-200",
+          collapsed && "md:w-0 md:overflow-hidden md:border-r-0",
+        )}
+      >
+        <Link to="/" onClick={onCloseMobile} className="flex h-14 shrink-0 items-center gap-2 px-4 hover:bg-accent/50">
         <Logo className="h-7 w-7 shrink-0" />
         <span className="text-sm font-semibold tracking-tight">
           mine<span className="font-bold text-primary">controller</span>
@@ -232,6 +286,7 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
           ))}
         </nav>
       )}
-    </aside>
+      </aside>
+    </>
   );
 }

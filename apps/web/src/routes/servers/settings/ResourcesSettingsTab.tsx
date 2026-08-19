@@ -43,7 +43,7 @@ export function ResourcesSettingsTab({ server, canEdit }: { server: ServerDto; c
             <CardTitle>Resources</CardTitle>
             <CardDescription>Changes apply the next time the server (re)starts.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-3">
+          <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <FormField label="RAM (MB)" htmlFor="memoryMb" error={errors.memoryMb}>
               <Input id="memoryMb" type="number" step={512} disabled={!canEdit} {...register("memoryMb")} />
             </FormField>

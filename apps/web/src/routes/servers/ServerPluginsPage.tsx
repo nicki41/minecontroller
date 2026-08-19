@@ -113,7 +113,7 @@ export default function ServerPluginsPage() {
         />
 
         {search.isLoading && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {[...Array(6)].map((_, i) => (
               <Skeleton key={i} className="h-32 w-full" />
             ))}
@@ -126,7 +126,7 @@ export default function ServerPluginsPage() {
 
         {!search.isLoading && (search.data?.hits.length ?? 0) > 0 && (
           <>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {search.data!.hits.map((hit) => (
                 <ModrinthResultCard
                   key={hit.project_id}

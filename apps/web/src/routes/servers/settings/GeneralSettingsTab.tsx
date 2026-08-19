@@ -166,7 +166,7 @@ export function GeneralSettingsTab({ server, canEdit }: { server: ServerDto; can
           <CardHeader>
             <CardTitle>General</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
+          <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField label="Server name" htmlFor="name" error={errors.name}>
               <Input id="name" disabled={!canEdit} {...register("name")} />
             </FormField>

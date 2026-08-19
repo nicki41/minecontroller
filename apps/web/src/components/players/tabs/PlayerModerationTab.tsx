@@ -215,7 +215,7 @@ export function PlayerModerationTab({ player: p, serverId, actions, initialCompo
         )}
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
         <div>
           <div className="mb-2 text-sm font-medium">Name history</div>
           {!nameHistoryData?.history.length ? (

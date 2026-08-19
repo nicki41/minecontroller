@@ -129,7 +129,7 @@ export default function AllocationsPage() {
       </div>
 
       {isLoading && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {[...Array(3)].map((_, i) => (
             <Skeleton key={i} className="h-40 w-full" />
           ))}
@@ -141,7 +141,7 @@ export default function AllocationsPage() {
       )}
 
       {!isLoading && servers.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {servers.map((server) => (
             <ServerAllocationsCard
               key={server.id}
