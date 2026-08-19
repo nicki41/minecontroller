@@ -7,6 +7,7 @@ import { ServerPropertiesTab } from "./settings/ServerPropertiesTab";
 import { ResourcesSettingsTab } from "./settings/ResourcesSettingsTab";
 import { ServerTypeConfigTab } from "./settings/ServerTypeConfigTab";
 import { DangerZoneCard } from "./settings/DangerZoneCard";
+import { NotificationsSettingsTab } from "./settings/NotificationsSettingsTab";
 
 export default function ServerSettingsPage() {
   const { server } = useServerOutletContext();
@@ -21,6 +22,7 @@ export default function ServerSettingsPage() {
         <TabsTrigger value="properties">Server Properties</TabsTrigger>
         {typeConfigSchema && <TabsTrigger value="type-config">{typeConfigSchema.tabLabel}</TabsTrigger>}
         <TabsTrigger value="resources">Resources</TabsTrigger>
+        <TabsTrigger value="notifications">Notifications</TabsTrigger>
       </TabsList>
 
       <TabsContent value="general" className="space-y-6">
@@ -37,6 +39,9 @@ export default function ServerSettingsPage() {
       )}
       <TabsContent value="resources">
         <ResourcesSettingsTab server={server} canEdit={canEdit} />
+      </TabsContent>
+      <TabsContent value="notifications">
+        <NotificationsSettingsTab server={server} canEdit={canEdit} />
       </TabsContent>
     </Tabs>
   );

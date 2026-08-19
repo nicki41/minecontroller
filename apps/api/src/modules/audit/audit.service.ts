@@ -63,6 +63,9 @@ export const AuditAction = {
   SCHEDULER_WORKFLOW_UPDATE: "scheduler.workflow_update",
   SCHEDULER_WORKFLOW_DELETE: "scheduler.workflow_delete",
   SCHEDULER_RUN: "scheduler.run",
+  NOTIFICATION_CHANNEL_CREATE: "notification.channel_create",
+  NOTIFICATION_CHANNEL_UPDATE: "notification.channel_update",
+  NOTIFICATION_CHANNEL_DELETE: "notification.channel_delete",
 } as const;
 
 export class AuditService {

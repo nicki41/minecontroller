@@ -209,6 +209,7 @@ model Server {
   schedulerWorkflows SchedulerWorkflow[]
   allocations      ServerAllocation[]
   notificationPreferences NotificationPreference[]
+  notificationChannels    NotificationChannel[]
 
   @@index([status])
 }
@@ -546,5 +547,37 @@ model NotificationPreference {
   server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
 
   @@unique([userId, serverId])
+  @@index([serverId])
+}
+
+/// External notification target (Discord/Telegram/Slack/generic webhook),
+/// server-wide rather than per-user — see the doc comment on
+/// NotificationPreference for why these are separate models. Management is
+/// gated on "servers.settings.edit" (FULL access only) at the API layer;
+/// GET responses never include the decrypted configEncrypted contents.
+model NotificationChannel {
+  id       String @id @default(cuid())
+  serverId String
+  /// "DISCORD" | "TELEGRAM" | "SLACK" | "WEBHOOK" — see NotificationChannelType in packages/shared/src/notifications.ts. Plain String for the same reason as ServerAccess.level.
+  type     String
+  /// User-given name shown in the Notifications tab (e.g. "Community Discord").
+  label    String
+  /// AES-256-GCM ciphertext (base64) of a type-specific JSON config object
+  /// (webhook URL, or bot token + chat ID, etc.) — see lib/webhookCrypto.ts.
+  /// Never returned to the frontend in plaintext.
+  configEncrypted String
+
+  serverStatus    Boolean @default(true)
+  playerActivity  Boolean @default(false)
+  crash           Boolean @default(true)
+  backup          Boolean @default(false)
+  performance     Boolean @default(false)
+  updateAvailable Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
   @@index([serverId])
 }

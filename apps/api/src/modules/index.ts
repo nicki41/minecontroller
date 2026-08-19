@@ -18,6 +18,7 @@ import { backupsRoutes } from "./backups/backups.routes.js";
 import { schedulerRoutes } from "./scheduler/scheduler.routes.js";
 import { pushRoutes } from "./notifications/push.routes.js";
 import { preferencesRoutes } from "./notifications/preferences.routes.js";
+import { channelsRoutes } from "./notifications/channels.routes.js";
 
 /**
  * Single place that wires every feature module's routes onto the app.
@@ -44,4 +45,5 @@ export async function registerApiRoutes(app: FastifyInstance) {
   await app.register(schedulerRoutes, { prefix: "/api/servers/:id/scheduler" });
   await app.register(pushRoutes, { prefix: "/api/users/me/push-subscriptions" });
   await app.register(preferencesRoutes, { prefix: "/api/servers/:id/notifications/preferences" });
+  await app.register(channelsRoutes, { prefix: "/api/servers/:id/notifications/channels" });
 }

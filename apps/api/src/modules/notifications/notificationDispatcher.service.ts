@@ -1,7 +1,10 @@
 import type { PrismaClient } from "@prisma/client";
-import type { NotificationCategory } from "@minecraftpanel/shared";
+import type { NotificationCategory, NotificationChannelType } from "@minecraftpanel/shared";
+import { env } from "../../config/env.js";
 import { logger } from "../../lib/logger.js";
+import { decryptChannelConfig } from "../../lib/webhookCrypto.js";
 import { sendWebPush } from "./webPushSender.js";
+import { sendToChannel } from "./channels/index.js";
 
 export interface NotificationEvent {
   serverId: string;
@@ -19,15 +22,36 @@ export interface NotificationEvent {
  * checkers — see plugins/notifications.ts) call dispatch(); this looks up
  * who's subscribed to that category on that server and sends to each.
  *
- * Push (per-user, per-device) is wired here. External service channels
- * (Discord/Telegram/Slack/webhook, per-server) are added to this same
- * dispatch() in a later change — see NotificationChannel.
+ * Fans out to both delivery mechanisms in parallel: push (per-user,
+ * per-device, via NotificationPreference) and external service channels
+ * (Discord/Telegram/Slack/webhook, per-server, via NotificationChannel).
  */
 export class NotificationDispatcherService {
   constructor(private readonly prisma: PrismaClient) {}
 
   async dispatch(event: NotificationEvent): Promise<void> {
-    await Promise.all([this.dispatchPush(event)]);
+    await Promise.all([this.dispatchPush(event), this.dispatchChannels(event)]);
+  }
+
+  private async dispatchChannels(event: NotificationEvent): Promise<void> {
+    const channels = await this.prisma.notificationChannel.findMany({
+      where: { serverId: event.serverId, [event.category]: true },
+    });
+
+    await Promise.all(
+      channels.map(async (channel) => {
+        try {
+          const config = decryptChannelConfig(channel.configEncrypted);
+          await sendToChannel(channel.type as NotificationChannelType, config, {
+            title: event.title,
+            body: event.body,
+            url: event.url ? new URL(event.url, env.WEB_ORIGIN).toString() : new URL(`/servers/${event.serverId}`, env.WEB_ORIGIN).toString(),
+          });
+        } catch (err) {
+          logger.debug({ err, channelId: channel.id, serverId: event.serverId }, "Failed to send to notification channel");
+        }
+      }),
+    );
   }
 
   private async dispatchPush(event: NotificationEvent): Promise<void> {

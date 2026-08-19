@@ -9,6 +9,7 @@ This document explains how minecontroller's pieces fit together: the container l
 - [Server creation flow](#server-creation-flow)
 - [Console: attached stdin, not RCON](#console-attached-stdin-not-rcon)
 - [Access control (RBAC)](#access-control-rbac)
+- [Notifications](#notifications)
 - [Design decisions](#design-decisions)
 
 ## Component overview
@@ -131,6 +132,21 @@ flowchart TD
 2. **Per-server access level** (`FULL` / `VIEW_ONLY` / no row at all) — narrows just the *server-scoped* subset of a user's role permissions (`servers.*`, `console.*`, `files.*`, `players.*`, `plugins.*`, `backups.*`) down for one specific server. Instance-wide permissions (`users.*`, `roles.*`, `audit.view`, `settings.manage`) are unaffected by server access.
 
 `requireServerAccess` returns `404` (not `403`) when access is denied, so a user without access can't distinguish "this server doesn't exist" from "this server exists but you can't see it." The `/ws/servers/:id` route reuses the same check, plus an explicit `Origin` check — WebSocket upgrades aren't covered by CORS preflight the way `fetch`/XHR are.
+
+## Notifications
+
+`NotificationDispatcherService` (`apps/api/src/modules/notifications/`) is the single fan-out point for every notification-worthy event, wired up in `plugins/notifications.ts`. It has two independent delivery mechanisms sharing one fixed category set (`packages/shared/src/notifications.ts`: server status, player activity, crash, backup, performance, update available):
+
+- **Web push** — per user, per server (`NotificationPreference` + `PushSubscription`), standard VAPID Web Push (see [configuration.md](configuration.md#web-push-notifications)). Any access level (FULL or VIEW_ONLY) may set their own push preferences for a server.
+- **External service channels** — per server, not per user (`NotificationChannel`: Discord/Telegram/Slack/generic webhook), for cases like a community Discord where everyone should see the message regardless of who's logged into the panel. Secrets (webhook URLs, bot tokens) are encrypted at rest (`lib/webhookCrypto.ts`, same AES-256-GCM-from-`SESSION_SECRET` pattern as TOTP secrets) and gated on `servers.settings.edit` (FULL access only) — a VIEW_ONLY user sees configured targets read-only, without the secret.
+
+Event sources call `dispatcher.dispatch({serverId, category, title, body})` rather than the dispatcher polling anything itself, except for two small self-contained pollers:
+
+- `MinecraftServerManager`'s existing `"status"` event → server status / crash.
+- `PlayerActivityTracker`'s `"playerJoin"`/`"playerLeave"` events (added alongside its existing DB writes) → player activity.
+- The backups route dispatches directly around its own `BackupService.create()` call.
+- `performanceChecker.ts` polls the existing `MetricsHistoryStore` for high memory usage (no TPS tracking exists in this codebase, so this category is memory-only).
+- `updateChecker.ts` periodically re-resolves each server's install plan through its existing provider (the same lookup the create-server wizard already uses) to detect a newer available version.
 
 ## Design decisions
 
