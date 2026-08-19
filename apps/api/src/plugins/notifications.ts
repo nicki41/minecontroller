@@ -4,6 +4,8 @@ import type { ServerStatus } from "@minecraftpanel/shared";
 import { NotificationDispatcherService } from "../modules/notifications/notificationDispatcher.service.js";
 import { PerformanceChecker } from "../modules/notifications/performanceChecker.js";
 import { UpdateChecker } from "../modules/notifications/updateChecker.js";
+import { resolveVapidKeys } from "../modules/notifications/vapidKeys.js";
+import { configureWebPush } from "../modules/notifications/webPushSender.js";
 import { logger } from "../lib/logger.js";
 
 declare module "fastify" {
@@ -24,6 +26,9 @@ declare module "fastify" {
  * background event source).
  */
 export default fp(async (fastify: FastifyInstance) => {
+  const vapidKeys = await resolveVapidKeys(fastify.prisma);
+  configureWebPush(vapidKeys);
+
   const dispatcher = new NotificationDispatcherService(fastify.prisma);
   fastify.decorate("notificationDispatcher", dispatcher);
 

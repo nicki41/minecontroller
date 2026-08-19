@@ -181,6 +181,7 @@ export function Sidebar({ collapsed = false, mobileOpen = false, onCloseMobile }
           "md:static md:z-auto md:w-64 md:translate-x-0 md:shadow-none md:transition-[width] md:duration-200",
           collapsed && "md:w-0 md:overflow-hidden md:border-r-0",
         )}
+        style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
         <Link to="/" onClick={onCloseMobile} className="flex h-14 shrink-0 items-center gap-2 px-4 hover:bg-accent/50">
         <Logo className="h-7 w-7 shrink-0" />
@@ -190,7 +191,7 @@ export function Sidebar({ collapsed = false, mobileOpen = false, onCloseMobile }
       </Link>
 
       {serverId ? (
-        <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-3 scrollbar-thin">
+        <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 scrollbar-thin">
           {SERVER_NAV_SECTIONS.map((section) => (
             <div key={section.title}>
               <p className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{section.title}</p>
@@ -217,7 +218,7 @@ export function Sidebar({ collapsed = false, mobileOpen = false, onCloseMobile }
           ))}
         </nav>
       ) : (
-        <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-3 scrollbar-thin">
+        <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 scrollbar-thin">
           {visibleSections.map((section, i) => (
             <div key={i}>
               {section.title && (

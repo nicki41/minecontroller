@@ -34,7 +34,15 @@ export function PlayerDetailModal({ player: p, serverId, actions, initialCompose
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="grid max-w-4xl grid-cols-1 gap-0 overflow-hidden p-0 sm:grid-cols-[260px_1fr]">
+      {/*
+        overflow-x-hidden, not overflow-hidden: the base DialogContent
+        already sets overflow-y-auto (Phase 1 mobile fix) so tall content
+        can scroll — overflow-hidden here would win via tailwind-merge
+        (same axis, last one wins) and silently make the whole dialog
+        unscrollable again. overflow-x-hidden only clips the sideways
+        corner-bleed this was originally added for, without touching Y.
+      */}
+      <DialogContent className="grid max-w-4xl grid-cols-1 gap-0 overflow-x-hidden p-0 sm:grid-cols-[260px_1fr]">
         <div className="flex flex-col items-center justify-center gap-3 bg-muted/30 p-6">
           {p.uuid ? (
             <>
@@ -48,7 +56,16 @@ export function PlayerDetailModal({ player: p, serverId, actions, initialCompose
           )}
         </div>
 
-        <div className="flex h-[600px] flex-col overflow-hidden p-6">
+        {/*
+          Fixed height + independently-scrolling tab content is a desktop-
+          only affordance (sm:h-[600px]/sm:overflow-hidden below) — on
+          mobile the columns stack (grid-cols-1 above sm), so this box is
+          left auto-height and flows naturally, letting the outer Dialog's
+          own scroll (see the overflow-x-hidden note above) reach
+          everything instead of relying on a second, nested scroll region,
+          which is exactly the kind of thing iOS Safari handles unreliably.
+        */}
+        <div className="flex flex-col p-6 sm:h-[600px] sm:overflow-hidden">
           <div className="mb-1 flex items-center gap-2">
             <div className="text-xl font-bold">{p.username}</div>
             <button onClick={() => copy("username", p.username)} className="text-muted-foreground hover:text-foreground" title="Copy username">
@@ -84,7 +101,7 @@ export function PlayerDetailModal({ player: p, serverId, actions, initialCompose
               <TabsTrigger value="stats">Ingame Statistic</TabsTrigger>
             </TabsList>
 
-            <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+            <div className="mt-4 min-h-0 flex-1 pr-1 sm:overflow-y-auto">
               <TabsContent value="activity" className="mt-0">
                 <PlayerActivityTab player={p} serverId={serverId} />
               </TabsContent>

@@ -13,17 +13,15 @@ All variables are documented inline in [`.env.example`](../.env.example) — cop
 | `MC_PORT_RANGE_MIN` / `MC_PORT_RANGE_MAX` | Port range the panel picks a free port from when creating new servers. |
 | `MINECRAFT_IMAGE` | Docker image used for itzg-managed Minecraft server containers. Must stay compatible with `itzg/docker-minecraft-server`'s `VERSION`/`TYPE`/`EULA` env-var contract and RCON support. |
 | `RUNTIME_IMAGE_BASE` | Registry/repo prefix for the panel-managed Java runtime images (`:java8`/`:java17`/`:java21`/`:java25`), pulled automatically on first use. Only change this for a fork or a local test build. |
-| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Optional. Enables web push notifications (see [below](#web-push-notifications)). All three unset = push notifications are simply off; nothing else in the panel is affected. |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Optional. Only needed to pin a specific VAPID keypair (see [below](#web-push-notifications)) — web push works out of the box without setting any of these. |
 
 ## Web push notifications
 
 Push notifications (per-user, per-server toggles under a server's **Settings → Notifications** tab) use the standard [VAPID](https://datatracker.ietf.org/doc/html/rfc8292)-based Web Push protocol — no Apple Developer account or certificate needed, since iOS 16.4+ implements the same web standard as every other browser.
 
-1. Generate a keypair once: `npx web-push generate-vapid-keys`.
-2. Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` (a `mailto:` address or `https://` URL identifying you, per the VAPID spec) in `.env`.
-3. Restart the panel. Users can then enable push per server from that server's Notifications tab — the browser only prompts for notification permission when they explicitly click to enable it, never on page load.
+**Zero configuration needed**: on first boot, if `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` aren't set, the panel generates its own keypair and persists it in the database (the same instance-wide settings table Modrinth's UA override uses) — every later boot reuses that same stored pair instead of generating a new one, since a fresh keypair would silently invalidate every browser's existing push subscription (a subscription is cryptographically bound to the exact public key it was created with). Users can enable push per server from that server's Notifications tab as soon as the panel is running — the browser only prompts for notification permission when they explicitly click to enable it, never on page load.
 
-Leaving these unset is fine — the rest of the panel is unaffected, the dispatcher just skips push sends and logs one warning at startup.
+Set `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` yourself only if you want to **pin** a specific keypair — e.g. migrating to a fresh database without invalidating existing subscriptions, or sharing one keypair across multiple instances. Generate one with `npx web-push generate-vapid-keys`. `VAPID_SUBJECT` (a `mailto:` address or `https://` URL identifying you, per the VAPID spec) defaults to `mailto:admin@<your WEB_ORIGIN's hostname>` if left unset.
 
 ## `HOST_DATA_PATH`: the sibling-container problem
 

@@ -1,19 +1,27 @@
 import webpush from "web-push";
-import { env } from "../../config/env.js";
 import { logger } from "../../lib/logger.js";
+import type { VapidKeys } from "./vapidKeys.js";
 
-const vapidConfigured = Boolean(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.VAPID_SUBJECT);
+// Configured once at boot from plugins/notifications.ts (via
+// resolveVapidKeys), not eagerly at module load — the keys may need to be
+// read from (or generated and written to) the database first. `configured`
+// only ever false if that call itself fails, e.g. a DB error.
+let configured = false;
+let currentPublicKey: string | null = null;
 
-if (vapidConfigured) {
-  webpush.setVapidDetails(env.VAPID_SUBJECT!, env.VAPID_PUBLIC_KEY!, env.VAPID_PRIVATE_KEY!);
-} else {
-  logger.warn(
-    "VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT not fully set — web push notifications are disabled. See docs/configuration.md#web-push-notifications.",
-  );
+export function configureWebPush(keys: VapidKeys): void {
+  webpush.setVapidDetails(keys.subject, keys.publicKey, keys.privateKey);
+  configured = true;
+  currentPublicKey = keys.publicKey;
+  logger.info({ publicKey: keys.publicKey }, "Web push configured.");
 }
 
 export function isWebPushConfigured(): boolean {
-  return vapidConfigured;
+  return configured;
+}
+
+export function getVapidPublicKey(): string | null {
+  return currentPublicKey;
 }
 
 export interface WebPushPayload {
@@ -31,7 +39,7 @@ export interface PushSubscriptionKeys {
 
 /** Returns false (and, for a 404/410, the caller should delete the subscription) if the push service reports the subscription is gone. */
 export async function sendWebPush(subscription: PushSubscriptionKeys, payload: WebPushPayload): Promise<{ ok: boolean; expired: boolean }> {
-  if (!vapidConfigured) return { ok: false, expired: false };
+  if (!configured) return { ok: false, expired: false };
 
   try {
     await webpush.sendNotification(

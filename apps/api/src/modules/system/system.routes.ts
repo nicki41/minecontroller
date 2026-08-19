@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { getPublicIp } from "../../lib/publicIp.js";
-import { env } from "../../config/env.js";
+import { getVapidPublicKey } from "../notifications/webPushSender.js";
 
 export async function systemRoutes(fastify: FastifyInstance) {
   fastify.get("/network", { preHandler: fastify.requireAuth }, async (_request, reply) => {
@@ -9,6 +9,6 @@ export async function systemRoutes(fastify: FastifyInstance) {
   });
 
   fastify.get("/notifications/vapid-public-key", { preHandler: fastify.requireAuth }, async (_request, reply) => {
-    return reply.send({ vapidPublicKey: env.VAPID_PUBLIC_KEY ?? null });
+    return reply.send({ vapidPublicKey: getVapidPublicKey() });
   });
 }

@@ -21,7 +21,10 @@ export function Topbar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   const navigate = useNavigate();
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card/60 px-4 backdrop-blur">
+    <header
+      className="flex min-h-14 shrink-0 items-center justify-between border-b border-border bg-card/60 px-4 backdrop-blur"
+      style={{ paddingTop: "env(safe-area-inset-top)" }}
+    >
       <Button variant="ghost" size="icon" onClick={onToggleSidebar} aria-label="Toggle sidebar">
         <Menu className="h-4 w-4" />
       </Button>

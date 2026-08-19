@@ -57,7 +57,10 @@ export function AppShell() {
           layout differs.
         */}
         <main className="flex-1 overflow-y-auto scrollbar-thin [scrollbar-gutter:stable]">
-          <div className="mx-auto w-full max-w-[1400px] p-3 sm:p-4 md:p-6">
+          <div
+            className="mx-auto w-full max-w-[1400px] p-3 sm:p-4 md:p-6"
+            style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+          >
             <Outlet />
           </div>
         </main>
