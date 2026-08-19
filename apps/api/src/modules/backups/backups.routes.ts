@@ -14,13 +14,26 @@ export async function backupsRoutes(fastify: FastifyInstance) {
 
   fastify.post("/", { preHandler: fastify.requireServerAccess("backups.create") }, async (request, reply) => {
     const { note } = createBackupSchema.parse(request.body ?? {});
-    const backup = await backupService.create(request.mcServer!, note, request.user!.id);
+    const server = request.mcServer!;
+
+    let backup;
+    try {
+      backup = await backupService.create(server, note, request.user!.id);
+    } catch (err) {
+      await fastify.notificationDispatcher
+        .dispatch({ serverId: server.id, category: "backup", title: `${server.name}: backup failed`, body: "The backup could not be created." })
+        .catch(() => {});
+      throw err;
+    }
 
     await fastify.audit.record(
       AuditAction.BACKUP_CREATE,
-      { userId: request.user!.id, serverId: request.mcServer!.id, ipAddress: request.ip },
+      { userId: request.user!.id, serverId: server.id, ipAddress: request.ip },
       { backupId: backup.id, fileName: backup.fileName },
     );
+    await fastify.notificationDispatcher
+      .dispatch({ serverId: server.id, category: "backup", title: `${server.name}: backup completed`, body: `Backup ${backup.fileName} was created.` })
+      .catch(() => {});
     return reply.status(201).send({ backup });
   });
 

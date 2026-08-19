@@ -16,6 +16,8 @@ import { rolesRoutes } from "./roles/roles.routes.js";
 import { auditRoutes } from "./audit/audit.routes.js";
 import { backupsRoutes } from "./backups/backups.routes.js";
 import { schedulerRoutes } from "./scheduler/scheduler.routes.js";
+import { pushRoutes } from "./notifications/push.routes.js";
+import { preferencesRoutes } from "./notifications/preferences.routes.js";
 
 /**
  * Single place that wires every feature module's routes onto the app.
@@ -40,4 +42,6 @@ export async function registerApiRoutes(app: FastifyInstance) {
   await app.register(auditRoutes, { prefix: "/api/audit-log" });
   await app.register(backupsRoutes, { prefix: "/api/servers/:id/backups" });
   await app.register(schedulerRoutes, { prefix: "/api/servers/:id/scheduler" });
+  await app.register(pushRoutes, { prefix: "/api/users/me/push-subscriptions" });
+  await app.register(preferencesRoutes, { prefix: "/api/servers/:id/notifications/preferences" });
 }

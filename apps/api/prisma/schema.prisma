@@ -36,6 +36,8 @@ model User {
   playerBansCreated  PlayerBan[]    @relation("PlayerBanCreatedBy")
   playerBansRevoked  PlayerBan[]    @relation("PlayerBanRevokedBy")
   schedulerWorkflowsCreated SchedulerWorkflow[]
+  pushSubscriptions         PushSubscription[]
+  notificationPreferences   NotificationPreference[]
 
   @@index([email])
 }
@@ -206,6 +208,7 @@ model Server {
   playerBans       PlayerBan[]
   schedulerWorkflows SchedulerWorkflow[]
   allocations      ServerAllocation[]
+  notificationPreferences NotificationPreference[]
 
   @@index([status])
 }
@@ -487,4 +490,61 @@ model Setting {
   key String @id
   /// JSON-stringified value — see the note on AuditLog.details.
   value String
+}
+
+// ------------------------------------------------------------------
+// Notifications — web push (per user, per server) and external service
+// channels (per server, e.g. Discord/Telegram/Slack — see
+// NotificationChannel, added in a later migration). Both share the same
+// fixed category set; see packages/shared/src/notifications.ts.
+// ------------------------------------------------------------------
+
+/// One row per browser/device the user has enabled push on. A user can have
+/// several (phone + desktop, etc.) — all are notified for a category they
+/// have enabled on a given server.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  /// The push service URL the browser handed back from
+  /// pushManager.subscribe() — unique per browser+device registration.
+  endpoint  String   @unique
+  /// Public key (base64url) used to encrypt push payloads, from the
+  /// subscription's keys.p256dh.
+  p256dh    String
+  /// Auth secret (base64url), from the subscription's keys.auth.
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// One row per (user, server) — this user's own push toggles for that
+/// server, settable by anyone with any access level (FULL or VIEW_ONLY) to
+/// the server, not gated by servers.settings.edit like NotificationChannel
+/// is. Flat boolean columns, same shape as ServerAccess/ServerAllocation
+/// rather than a normalized category table, since the category set is
+/// fixed (see NotificationCategory in packages/shared).
+model NotificationPreference {
+  id       String @id @default(cuid())
+  userId   String
+  serverId String
+
+  serverStatus    Boolean @default(true)
+  playerActivity  Boolean @default(false)
+  crash           Boolean @default(true)
+  backup          Boolean @default(false)
+  performance     Boolean @default(false)
+  updateAvailable Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, serverId])
+  @@index([serverId])
 }

@@ -66,3 +66,40 @@ self.addEventListener("fetch", (event) => {
     })(),
   );
 });
+
+// Payload shape sent by apps/api/src/modules/notifications/webPushSender.ts:
+// { title, body, url } — url defaults to the server's own page.
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+  let payload;
+  try {
+    payload = event.data.json();
+  } catch {
+    return;
+  }
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      data: { url: payload.url || "/" },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || "/";
+  event.waitUntil(
+    (async () => {
+      const clientsList = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const existing = clientsList.find((c) => new URL(c.url).origin === self.location.origin);
+      if (existing) {
+        await existing.focus();
+        if ("navigate" in existing) await existing.navigate(targetUrl);
+        return;
+      }
+      await self.clients.openWindow(targetUrl);
+    })(),
+  );
+});

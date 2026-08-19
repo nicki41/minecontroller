@@ -1,4 +1,5 @@
 import type { Readable } from "node:stream";
+import { EventEmitter } from "node:events";
 import type { PrismaClient } from "@prisma/client";
 import type { ServerStatus } from "@minecraftpanel/shared";
 import { logger } from "../lib/logger.js";
@@ -52,8 +53,14 @@ interface TrackedServer {
  * reconciliation that closes sessions missed by a dropped log line (kicks,
  * crashes) and seeds sessions for players already online when this tracker
  * (re)starts.
+ *
+ * Also emits "playerJoin"/"playerLeave" — from openSession/closeOpenSession
+ * specifically, the two primitives shared by both the log-line path and the
+ * RCON reconcile path, so the notification dispatcher (see
+ * modules/notifications/) sees a join/leave exactly once regardless of
+ * which path detected it.
  */
-export class PlayerActivityTracker {
+export class PlayerActivityTracker extends EventEmitter {
   private tracked = new Map<string, TrackedServer>();
   private periodicTimer: ReturnType<typeof setInterval> | null = null;
   private disposed = false;
@@ -61,7 +68,9 @@ export class PlayerActivityTracker {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly manager: PlayerActivityManager,
-  ) {}
+  ) {
+    super();
+  }
 
   start(): void {
     if (this.periodicTimer) return;
@@ -220,11 +229,12 @@ export class PlayerActivityTracker {
     }
   }
 
-  private async openSession(serverId: string, usernameLower: string, startedAt: Date): Promise<void> {
+  private async openSession(serverId: string, usernameLower: string, startedAt: Date, username: string): Promise<void> {
     await this.prisma.playerSession.create({ data: { serverId, usernameLower, startedAt } });
+    this.emit("playerJoin", serverId, username);
   }
 
-  private async closeOpenSession(serverId: string, usernameLower: string, endedAt: Date): Promise<void> {
+  private async closeOpenSession(serverId: string, usernameLower: string, endedAt: Date, username: string): Promise<void> {
     const session = await this.prisma.playerSession.findFirst({
       where: { serverId, usernameLower, endedAt: null },
       orderBy: { startedAt: "desc" },
@@ -232,6 +242,7 @@ export class PlayerActivityTracker {
     if (!session) return;
     const durationSeconds = Math.max(0, Math.round((endedAt.getTime() - session.startedAt.getTime()) / 1000));
     await this.prisma.playerSession.update({ where: { id: session.id }, data: { endedAt, durationSeconds } });
+    this.emit("playerLeave", serverId, username);
   }
 
   private async recordJoin(serverId: string, username: string): Promise<void> {
@@ -243,7 +254,7 @@ export class PlayerActivityTracker {
       create: { serverId, usernameLower, username, firstSeenAt: now, lastSeenAt: now, currentSessionStartedAt: now },
       update: { username, lastSeenAt: now, currentSessionStartedAt: now, firstSeenAt: existing?.firstSeenAt ?? now },
     });
-    await this.openSession(serverId, usernameLower, now);
+    await this.openSession(serverId, usernameLower, now, username);
   }
 
   private async recordLeave(serverId: string, username: string): Promise<void> {
@@ -264,7 +275,7 @@ export class PlayerActivityTracker {
       where: { serverId_usernameLower: { serverId, usernameLower } },
       data: { lastSeenAt: now, currentSessionStartedAt: null, totalPlaytimeSeconds: existing.totalPlaytimeSeconds + deltaSeconds },
     });
-    await this.closeOpenSession(serverId, usernameLower, now);
+    await this.closeOpenSession(serverId, usernameLower, now, username);
   }
 
   private async reconcileAll(): Promise<void> {
@@ -297,7 +308,7 @@ export class PlayerActivityTracker {
         where: { id: profile.id },
         data: { lastSeenAt: now, currentSessionStartedAt: null, totalPlaytimeSeconds: profile.totalPlaytimeSeconds + deltaSeconds },
       });
-      await this.closeOpenSession(serverId, profile.usernameLower, now);
+      await this.closeOpenSession(serverId, profile.usernameLower, now, profile.username);
     }
 
     const trackedLower = new Set(openSessions.map((p) => p.usernameLower));
@@ -308,7 +319,7 @@ export class PlayerActivityTracker {
         create: { serverId, usernameLower, username, firstSeenAt: now, lastSeenAt: now, currentSessionStartedAt: now },
         update: { username, lastSeenAt: now, currentSessionStartedAt: now },
       });
-      await this.openSession(serverId, usernameLower, now);
+      await this.openSession(serverId, usernameLower, now, username);
     }
   }
 
@@ -321,7 +332,7 @@ export class PlayerActivityTracker {
         where: { id: profile.id },
         data: { lastSeenAt: now, currentSessionStartedAt: null, totalPlaytimeSeconds: profile.totalPlaytimeSeconds + deltaSeconds },
       });
-      await this.closeOpenSession(serverId, profile.usernameLower, now);
+      await this.closeOpenSession(serverId, profile.usernameLower, now, profile.username);
     }
   }
 }

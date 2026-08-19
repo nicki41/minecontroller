@@ -50,6 +50,17 @@ const envSchema = z
 
     MODRINTH_API_URL: z.string().url().default("https://api.modrinth.com/v2"),
     MODRINTH_USER_AGENT: z.string().default("minecraftpanel/0.1.0"),
+
+    // Optional on purpose: web push is a layered-on feature, not a hard
+    // dependency — with these unset, webPushSender logs a warning once and
+    // the dispatcher just skips push sends instead of failing to boot.
+    // Generate a pair with `npx web-push generate-vapid-keys`.
+    VAPID_PUBLIC_KEY: z.string().optional(),
+    VAPID_PRIVATE_KEY: z.string().optional(),
+    // mailto: address or https:// URL identifying the sender, per the Web
+    // Push protocol's VAPID "sub" claim — push services (Chrome, etc.) use
+    // this to contact you if this server's pushes need to be throttled/blocked.
+    VAPID_SUBJECT: z.string().optional(),
   })
   .refine((e) => e.MC_PORT_RANGE_MIN <= e.MC_PORT_RANGE_MAX, {
     message: "MC_PORT_RANGE_MIN must be <= MC_PORT_RANGE_MAX",
