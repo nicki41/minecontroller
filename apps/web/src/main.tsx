@@ -35,3 +35,24 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </QueryClientProvider>
   </React.StrictMode>,
 );
+
+// Fade out and remove the static splash overlay (see index.html) now that
+// React has taken over the page. rAF twice: one to let the just-rendered
+// tree actually paint before we start the fade, one more to be safe on
+// browsers that batch the first frame with layout.
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
+    const splash = document.getElementById("splash");
+    if (!splash) return;
+    splash.style.opacity = "0";
+    setTimeout(() => splash.remove(), 220);
+  });
+});
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch((err) => {
+      console.error("Service worker registration failed:", err);
+    });
+  });
+}

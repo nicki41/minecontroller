@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { IosInstallBanner } from "./IosInstallBanner";
 
 export function AppShell() {
   const isDesktop = useMediaQuery("(min-width: 768px)");
@@ -44,6 +45,7 @@ export function AppShell() {
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar onToggleSidebar={handleToggleSidebar} />
+        <IosInstallBanner />
         {/*
           scrollbar-gutter:stable reserves the scrollbar's space permanently,
           whether or not it's actually showing. Without it, the centered
