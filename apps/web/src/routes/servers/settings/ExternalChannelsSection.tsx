@@ -25,6 +25,7 @@ import {
   useDeleteNotificationChannel,
   useTestNotificationChannel,
 } from "@/lib/notifications";
+import { ApiError } from "@/lib/api";
 import { CreateChannelDialog } from "./CreateChannelDialog";
 
 function ChannelRow({ serverId, channel, canEdit }: { serverId: string; channel: NotificationChannelDto; canEdit: boolean }) {
@@ -93,7 +94,7 @@ function ChannelRow({ serverId, channel, canEdit }: { serverId: string; channel:
  * hasPermission("servers.settings.edit")).
  */
 export function ExternalChannelsSection({ serverId, canEdit }: { serverId: string; canEdit: boolean }) {
-  const { data, isLoading } = useNotificationChannels(serverId);
+  const { data, isLoading, isError, error } = useNotificationChannels(serverId);
   const [addOpen, setAddOpen] = useState(false);
 
   const channels = data?.channels ?? [];
@@ -120,7 +121,11 @@ export function ExternalChannelsSection({ serverId, canEdit }: { serverId: strin
           </div>
         )}
 
-        {!isLoading && channels.length === 0 && (
+        {isError && (
+          <p className="text-sm text-destructive">{error instanceof ApiError ? error.message : "Failed to load notification targets."}</p>
+        )}
+
+        {!isLoading && !isError && channels.length === 0 && (
           <EmptyState icon={Webhook} title="No targets configured" description="Add a Discord webhook, Telegram bot, Slack webhook, or generic webhook to post events there." />
         )}
 

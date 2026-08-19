@@ -5,6 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ApiError } from "@/lib/api";
 import { isPushSupported, useIsPushSubscribedOnThisDevice, useSubscribeToPush, useUnsubscribeFromPush } from "@/lib/push";
 import { useNotificationPreferences, useUpdateNotificationPreferences } from "@/lib/notifications";
 
@@ -14,7 +15,7 @@ import { useNotificationPreferences, useUpdateNotificationPreferences } from "@/
  * (this is purely personal, unlike the External services section below it).
  */
 export function PushNotificationsSection({ serverId }: { serverId: string }) {
-  const { data, isLoading } = useNotificationPreferences(serverId);
+  const { data, isLoading, isError, error } = useNotificationPreferences(serverId);
   const update = useUpdateNotificationPreferences(serverId);
   const subscribedQuery = useIsPushSubscribedOnThisDevice();
   const subscribe = useSubscribeToPush();
@@ -65,6 +66,10 @@ export function PushNotificationsSection({ serverId }: { serverId: string }) {
               <Skeleton key={i} className="h-8 w-full" />
             ))}
           </div>
+        )}
+
+        {isError && (
+          <p className="text-sm text-destructive">{error instanceof ApiError ? error.message : "Failed to load push preferences."}</p>
         )}
 
         {data &&
