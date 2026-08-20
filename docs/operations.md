@@ -7,6 +7,7 @@ Day-to-day running of the panel: first admin setup, backups, updates, and troubl
 - [First admin account](#first-admin-account)
 - [Port allocations](#port-allocations)
 - [Backups](#backups)
+- [Installing the panel as an app (PWA)](#installing-the-panel-as-an-app-pwa)
 - [Updates](#updates)
 - [Troubleshooting](#troubleshooting)
 
@@ -40,6 +41,15 @@ Every server has a manual backup action under **Server → Settings → Backups*
 - **Delete**: removes only the archive file, never the live data directory.
 
 For offsite protection, periodically back up the whole `data/` folder externally as well (e.g. `rsync`/`restic` from the host) — the built-in backup feature is not a substitute for an external 3-2-1 backup strategy. Since the SQLite database (`data/db.sqlite`, plus its `-wal`/`-shm` companion files under WAL mode) also lives in this folder, an external `data/` backup automatically covers users, roles, the audit log, and server metadata too — ideally stop the api container briefly first so the SQLite files aren't being written to mid-copy.
+
+## Installing the panel as an app (PWA)
+
+The frontend ships a web app manifest and service worker (`apps/web/public/manifest.json` / `sw.js`), so any modern browser can install it as a standalone app instead of just bookmarking a tab — icon, splash screen, its own window, no browser chrome.
+
+- **Android / desktop Chrome or Edge**: an install icon appears in the address bar, or use the browser menu → "Install minecontroller".
+- **iOS 16.4+ / iPadOS Safari**: Share → **Add to Home Screen**. Web push notifications only work from this installed instance on iOS, not from Safari itself — see [configuration.md#web-push-notifications](configuration.md#web-push-notifications).
+
+The service worker caches static assets (JS/CSS/icons) cache-first for snappier repeat loads, but always goes straight to the network for `/api/*` and `/ws/*` and for the page navigation itself — there is no offline mode for actual panel data, only a faster shell load. A new deployment is picked up automatically on next launch (old caches are dropped on activate); no manual "clear cache" step is needed after an update.
 
 ## Updates
 

@@ -12,19 +12,25 @@
 
 A self-hosted management panel for multiple Minecraft servers. Each server runs in its own Docker container — installed and launched by the panel itself, on minimal Java-only runtime images it publishes ([`runtime-images/`](runtime-images/)), not a third-party all-in-one image — managed through a Fastify/TypeScript API with an embedded SQLite database and a React UI. One container, no separate database service, no build step — every image is pulled pre-built from GitHub Container Registry, so `docker compose up -d` really is all it takes.
 
+![Dashboard with three servers](docs/assets/screenshots/dashboard.png)
+
 **Features:**
 
-- 🧙 **Creation wizard** — Vanilla / Paper / Fabric fully supported; Forge / NeoForge selectable but their install pipeline isn't finished yet (see [docs/architecture.md](docs/architecture.md#server-creation-flow))
-- 📊 **Dashboard** — every server at a glance: status, uptime, players/slots, ip:port, version, and a live load sparkline
-- 💻 **Live attached console** — real stdin/stdout, not a third-party RCON wrapper
-- 📁 **File manager** with a Monaco (VS Code) editor
-- 🔌 **Modrinth integration** — search and install plugins/mods straight from the panel
-- 🌐 **Port allocations** — open extra ports per server (voice chat, a web map, Geyser, ...) from one place, with automatic no-duplicates enforcement
-- 👥 **Player management** — whitelist / op / kick / ban, playtime and session history
-- 🔐 **Multi-user RBAC** — role-based *and* per-server access control (view-only vs. full)
-- 📜 **Audit log** of every meaningful action
-- 💾 **Manual backups**, plus a scheduler for recurring workflows (backup, restart, console commands, ...)
-- ⚙️ **Per-server RAM/CPU limits**
+- **Creation wizard** — Vanilla / Paper / Fabric fully supported; Forge / NeoForge selectable but their install pipeline isn't finished yet (see [docs/architecture.md](docs/architecture.md#server-creation-flow))
+- **Dashboard** — every server at a glance: status, uptime, players/slots, ip:port, version, and a live load sparkline
+- **Live attached console** — real stdin/stdout, not a third-party RCON wrapper
+- **File manager** with a Monaco (VS Code) editor
+- **Modrinth integration** — search and install plugins/mods straight from the panel
+- **Port allocations** — open extra ports per server (voice chat, a web map, Geyser, ...) from one place, with automatic no-duplicates enforcement
+- **Player management** — whitelist / op / kick / ban, playtime and session history
+- **Multi-user RBAC** — role-based *and* per-server access control (view-only vs. full)
+- **Audit log** of every meaningful action
+- **Manual backups**, plus a scheduler for recurring workflows (backup, restart, console commands, ...)
+- **Per-server RAM/CPU limits**
+- **Notifications** — web push (per user, zero-config VAPID) and external channels (Discord/Telegram/Slack/webhook, per server)
+- **Installable PWA** — add it to your home screen on iOS/Android or install it as a desktop app; fully responsive down to phone width
+
+A complete tour with screenshots of every feature is in **[docs/FEATURES.md](docs/FEATURES.md)**.
 
 ## Table of contents
 
@@ -38,6 +44,7 @@ A self-hosted management panel for multiple Minecraft servers. Each server runs 
   - [3. Create your first server](#3-create-your-first-server)
   - [4. Connect from Minecraft](#4-connect-from-minecraft)
   - [5. Optional next steps](#5-optional-next-steps)
+- [Features & screenshots](#features--screenshots)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
 - [License](#license)
@@ -151,11 +158,14 @@ The sidebar on the left is where everything else lives:
 
 Click **Create Server** and work through the wizard:
 
-1. **Basics** — a name and optional description.
+1. **Name** — a name and optional description.
 2. **Software** — Vanilla, Paper, or Fabric (Forge/NeoForge are shown but not installable yet).
 3. **Version** — fetched live from that software's own metadata API, newest first.
 4. **Resources** — RAM and CPU limits; an optional disk limit.
-5. **EULA** — you must explicitly accept Mojang's EULA here; the panel refuses to boot a server otherwise, matching the real-world legal requirement.
+5. **Port** — leave it automatic (assigned from the configured range) or pick one explicitly.
+6. **Confirm** — review everything, then explicitly accept Mojang's EULA; the panel refuses to boot a server otherwise, matching the real-world legal requirement, and never accepts it on your behalf.
+
+<p align="center"><img src="docs/assets/screenshots/wizard-confirm.png" alt="Create Server wizard, confirm step" width="600"></p>
 
 Submitting takes you straight to the new server's **Console** tab, where you can watch it move through `CREATING` → `INSTALLING` (downloading and verifying the actual server jar — nothing pre-baked into an image) → `STARTING` → `RUNNING`. First boot is the slowest step (world generation); everything after is normal Minecraft startup time.
 
@@ -171,13 +181,24 @@ Need more than the one game port — a Dynmap/BlueMap web view, a voice-chat plu
 - **Turn on 2FA** for your own account under **Settings**.
 - **Set up a backup schedule** or other recurring workflow from a server's **Scheduler** tab, instead of relying only on manual backups.
 - **Install plugins/mods** via the **Modrinth** page — search, pick a version compatible with your server's software/Minecraft version, and install in one click.
+- **Install the panel as an app** on your phone or desktop (it's a PWA) and turn on push notifications for server status, crashes, and more — see [docs/operations.md#installing-the-panel-as-an-app-pwa](docs/operations.md#installing-the-panel-as-an-app-pwa).
 
 For everything after this first run — adding more admins, backup strategy, updating the panel, and troubleshooting — see **[docs/operations.md](docs/operations.md)**.
+
+## Features & screenshots
+
+A screenshot of every feature — the console, file manager, players, Modrinth browser, scheduler, notifications, RBAC/admin pages, 2FA setup, and the mobile view — lives in **[docs/FEATURES.md](docs/FEATURES.md)**.
+
+<p align="center">
+  <img src="docs/assets/screenshots/server-files-editor.png" alt="File manager with server.properties open in the Monaco editor" width="49%">
+  <img src="docs/assets/screenshots/server-players.png" alt="Players tab with playtime and last-seen" width="49%">
+</p>
 
 ## Documentation
 
 | Doc | Covers |
 |---|---|
+| [docs/FEATURES.md](docs/FEATURES.md) | Full feature tour with screenshots |
 | [docs/architecture.md](docs/architecture.md) | Component diagram, server-creation sequence, RBAC model, directory layout, design decisions |
 | [docs/configuration.md](docs/configuration.md) | Full `.env` reference, the `HOST_DATA_PATH` sibling-container problem |
 | [docs/operations.md](docs/operations.md) | First admin account, backups, updates, troubleshooting |
